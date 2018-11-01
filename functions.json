@@ -1,0 +1,42 @@
+{
+   "run_juicer" : {
+      "mode_NO" : 1,
+      "descp" : "get shell file (Umich Flux System) to run juicer.",
+      "_group" : "-",
+      "_comments" : "get shell (Umich Flux System) to run juicer",
+      "module" : "HaploHiC::Extensions::ShellForJuicer",
+      "main_func" : "shell_to_run_juicer"
+   },
+   "dump_BP" : {
+      "mode_NO" : 2,
+      "descp" : "run dump BP mode, and merge the inter-chr and intra-chr.",
+      "_group" : "-",
+      "_comments" : "run dump in BP mode, merge the inter-chr and intra-chr",
+      "module" : "HaploHiC::Extensions::JuicerDumpBP",
+      "main_func" : "JuicerDumpBPWrok"
+   },
+   "dump_FRAG" : {
+      "mode_NO" : 3,
+      "descp" : "run dump FRAG mode, and merge the inter-chr and intra-chr.",
+      "_group" : "-",
+      "_comments" : "run dump in FRAG mode, merge the inter-chr and intra-chr",
+      "main_func" : "JuicerDumpFRAGWrok",
+      "module" : "HaploHiC::Extensions::JuicerDumpFRAG"
+   },
+   "FRAG_gene" : {
+      "mode_NO" : 4,
+      "_group" : "-",
+      "_comments" : "convert FRAG contacts to gene level contacts",
+      "module" : "HaploHiC::Extensions::FRAG2Gene",
+      "main_func" : "DumpFRAGtoGeneLevel",
+      "descp" : "convert FRAG contacts to gene level contacts."
+   },
+   "haplo_div" : {
+      "mode_NO" : 5,
+      "_group" : "-",
+      "_comments" : "divide the diploid haplotype (P/M) Hi-C reads from alignment",
+      "module" : "HaploHiC::PhasedHiC::HaploDivideReads",
+      "descp" : "divide the diploid haplotype (P/M) Hi-C reads from alignment.",
+      "main_func" : "DivideHiCreadsToHaplotypes"
+   }
+}
