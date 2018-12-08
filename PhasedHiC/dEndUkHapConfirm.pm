@@ -29,8 +29,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.13";
-$DATE = '2018-11-01';
+$VERSION = "0.14";
+$DATE = '2018-11-22';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -58,15 +58,15 @@ sub dEndUK_get_HapLink{
         phasePE_to_contactCount( tagToBamHref => $tagToBamHref ); 
     }
 
-    # all bams or selected
-    my @TODOpairBamHref = getTODOpairBamHrefArray;
-    # prepare getHap.bam name
+    # prepare getHap.bam name of all source bams
     my $tag = 'unknown';
-    prepare_getHapBamName(pairBamHref => $_, tag => $tag, splitBam => $_->{splitBam}->{$tag}) for @TODOpairBamHref;
+    prepare_getHapBamName(pairBamHref => $_, tag => $tag, splitBam => $_->{splitBam}->{$tag}) for @{$V_Href->{PairBamFiles}};
 
     # start from step after current step
     return if $V_Href->{stepToStart} > 3;
 
+    # all bams or selected
+    my @TODOpairBamHref = getTODOpairBamHrefArray;
     # fork manager
     my $pm;
     my $forkNum = min( $V_Href->{forkNum}, scalar(@TODOpairBamHref) );
@@ -130,12 +130,12 @@ sub assign_dEndUKend_haplotype{
                                                    chrSortKey  => 'turn');
     # recover SuppHaplo attribute
     $_->recover_SuppHaploAttr for @$rOB_sortAref;
-    # get haplo link countof paired rOB, <do not need sort again>
+    # get haplo link count of paired rOB, <do not need sort again>
     my ($HapLinkC_Href, $mark) = get_rOBpair_HapLinkCount(rOB_a => $rOB_sortAref->[0], rOB_b => $rOB_sortAref->[-1], skipSort => 1);
     # assign HapID to both nonHap_rOB
     my $assignMethod;
     ## if empty, just set as haplo-intra
-    if( $mark !~ '^RegionPhased' ){
+    if($mark !~ /^RegionPhased/){
         $HapLinkC_Href->{"h$_,h$_"} = 1 for (1 .. $V_Href->{haploCount});
         $mark .= ';SetHapIntra';
         $assignMethod = 'rd';

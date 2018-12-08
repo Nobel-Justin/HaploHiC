@@ -9,7 +9,7 @@ use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::BioInfo::FASTA qw/ read_fasta_file /;
 use BioFuse::Util::String qw/ getStrRepUnit /;
-use BioFuse::Util::Index qw/ Pos2Idx /;
+use BioFuse::Util::Index qw/ Pos2Idx FindOverlapIdxRegion /;
 use BioFuse::BioInfo::Objects::PhasedMut_OB;
 use HaploHiC::LoadOn;
 
@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedMutWork';
 #----- version --------
-$VERSION = "0.12";
-$DATE = '2018-10-31';
+$VERSION = "0.14";
+$DATE = '2018-11-24';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -256,8 +256,9 @@ sub release_phaseMut_OB{
 # hom-InDels are also discarded
 sub filterClosePhasedInDel{
 
+    # output only in 1st ('splitBam') step
     my $closeInDelReport = GetPath(filekey => 'closeInDelReport');
-    open (CLIDRT, Try_GZ_Write($closeInDelReport)) || die "fail write VCF_load.phased_mut.closeInDel.list: $!\n";
+    open (CLIDRT, Try_GZ_Write($closeInDelReport)) || die "fail write VCF_load.phased_mut.closeInDel.list: $!\n" if $V_Href->{stepToStart} <= 1;
 
     for my $chr ( sort keys %{$V_Href->{PhasedMut}} ){
         my %PhaMutFilter;
@@ -309,9 +310,9 @@ sub filterClosePhasedInDel{
                 unshift @delPhaMutOB, splice( @{$chrHref->{$PosIdx}}, $ArrayIdx, 1 );
                 $V_Href->{VCFmutStat}->{i08_INDEL_close} ++ unless $delPhaMutOB[0]->is_hom; # only count Het-InDel
             }
-            # alert
+            # alert, output only in 1st ('splitBam') step
             for my $delPhaMutOB (@delPhaMutOB){
-                print CLIDRT join("\t", @{$delPhaMutOB->get_infoSummary}) . "\n";
+                print CLIDRT join("\t", @{$delPhaMutOB->get_infoSummary}) . "\n" if $V_Href->{stepToStart} <= 1;
             }
             # become empty!
             if( scalar(@{$chrHref->{$PosIdx}}) == 0 ){
@@ -333,8 +334,8 @@ sub filterClosePhasedInDel{
             }
         }
     }
-
-    close CLIDRT;
+    # output only in 1st ('splitBam') step
+    close CLIDRT if $V_Href->{stepToStart} <= 1;
 
     # inform
     stout_and_sterr "[INFO]\t".`date`
@@ -350,31 +351,17 @@ sub PosToPhasedMut{
     my $pos = $parm{pos};
     my $ext = $parm{ext} || 0;
 
-    return [] if( !exists $V_Href->{PhasedMut}->{$chr} );
-    my $chrHref = $V_Href->{PhasedMut}->{$chr};
-
-    my @region = ( $ext >= 0 ? ($pos, $pos+$ext) : ($pos+$ext, $pos) );
-    my @PosIdx = map { ( Pos2Idx(pos => $_, winSize => $V_Href->{phaMutPosWinSize}) ) } @region;
-
-    my @phMut_OB = ();
-    for my $PosIdx ( grep exists $chrHref->{$_}, $PosIdx[0] .. $PosIdx[1] ){
-        # inner PosIdx
-        if(    $PosIdx != $PosIdx[0]
-            && $PosIdx != $PosIdx[1]
-        ){
-            push @phMut_OB, @{$chrHref->{$PosIdx}};
-        }
-        # boundary PosIdx
-        else{
-            for my $phMut_OB ( @{$chrHref->{$PosIdx}} ){ # coordinates-sorted
-                next if( $phMut_OB->get_pos < $region[0]  );
-                last if( $phMut_OB->get_pos > $region[-1] );
-                push @phMut_OB, $phMut_OB;
-            }
-        }
+    if(exists $V_Href->{PhasedMut}->{$chr}){
+        return FindOverlapIdxRegion(
+                 IdxItvHref => $V_Href->{PhasedMut}->{$chr},
+                 regionAref => $ext >= 0 ? [$pos, $pos+$ext] : [$pos+$ext, $pos],
+                 winSize => $V_Href->{phaMutPosWinSize},
+                 queryMode => 'ob_pos'
+               );
     }
-
-    return \@phMut_OB;
+    else{
+        return [];
+    }
 }
 
 #--- 

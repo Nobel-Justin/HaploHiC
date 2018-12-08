@@ -122,6 +122,7 @@ sub contacts_output{
     (-d $dumpOutDir || `mkdir -p $dumpOutDir`);
     my $output_prefix = "dumpContacts.$V_Href->{dumpMode}.$V_Href->{dumpBinSize}";
     my $output_header = "##dumpMode: $V_Href->{dumpMode}, dumpBinSize: $V_Href->{dumpBinSize}\n"
+                       .($V_Href->{dumpMode} eq 'FRAG' ? "##enzyme: $V_Href->{enzyme_type}\n" : '')
                        ."##haploCount: $V_Href->{haploCount}\n"
                        ."##".`date`;
 

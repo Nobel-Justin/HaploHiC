@@ -33,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.05";
-$DATE = '2018-11-01';
+$VERSION = "0.07";
+$DATE = '2018-11-16';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -92,6 +92,7 @@ sub smartBam_PEread{
     # read bam
     open (BAM,"$V_Href->{samtools} view $viewOpt $bam |") || die "fail read $mark bam: $!\n";
     my $pe_Count = 0;
+    my $pe_CountInform = $V_Href->{peC_ReportUnit};
     my $last_pid = '';
     my $last_peOB = undef;
     my @peOB_pool = ();
@@ -104,14 +105,17 @@ sub smartBam_PEread{
             if( $pe_Count % $peOB_AbufferSize == 0 ){
                 &{$subrtRef}(pe_OB => $_, @$subrtParmAref) for @peOB_pool;
                 @peOB_pool = ();
+                # inform
+                if($pe_Count >= $pe_CountInform){
+                    stout_and_sterr "[INFO]\t".`date`
+                                         ."\tload $pe_CountInform PE-reads from $mark bam.\n";
+                    $pe_CountInform += $V_Href->{peC_ReportUnit};
+                }
             }
             # create new pe_OB
             $last_peOB = BioFuse::BioInfo::Objects::HicPairEnd_OB->new;
             # update
             $last_pid = $reads_OB->get_pid;
-            # inform
-            stout_and_sterr "[INFO]\t".`date`
-                                 ."\tload $pe_Count PE-reads from $mark bam.\n" if($pe_Count % $V_Href->{peC_ReportUnit} == 0);
         }
         # load this reads_OB to pe_OB
         $last_peOB->load_reads_OB(reads_OB => $reads_OB);
@@ -148,6 +152,12 @@ sub load_phasedPE_contacts{
     # double check
     if( scalar(@hasHaprOB) < 2 ){
         warn_and_exit "<ERROR>\tPhased PE-reads doesn't have at least two haplotype confirmed alignments.\n".Dumper($pe_OB);
+    }
+    # skip hapComb set by flanking region lacking phased contacts, see func 'get_rOBpair_HapLinkCount'
+    if(    $hasHaprOB[ 0]->is_fromUnPhasedRegRand
+        || $hasHaprOB[-1]->is_fromUnPhasedRegRand
+    ){
+        return; # do not take this PE into contact counting
     }
     # as sorted, so take first[0] and last[-1] one as index of contacted region
     my (%chr, %pIdx, %hapID);
@@ -220,11 +230,6 @@ sub get_rOBpair_HapLinkCount{
     my %parm = @_;
     my $skipSort = $parm{skipSort} || 0;
 
-    # variants
-    my $FlankUnit  = $V_Href->{UKreadsFlankRegUnit};
-    my $PhaHetMutC = $V_Href->{UKreadsMaxPhasedHetMut};
-    my $FlankTimes = $V_Href->{UKreadsFlankRegUnitMaxTimes};
-
     my %HapLinkCount;
     # chr,pos ascending sort
     my %rOB;
@@ -254,8 +259,9 @@ sub get_rOBpair_HapLinkCount{
     # iteratively find sufficient phased Het-Mut in local flank region
     my $chrHapLinkHref = $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}};
     my %fReg = map { ($_, {pos=>{},mct=>{}}) } keys %rOB;
-    for my $time ( 1 .. $FlankTimes ){
-        my $FlankSize = $FlankUnit * $time;
+    for my $time ( 1 .. $V_Href->{UKreadsFlankRegUnitMaxTimes} ){
+        my $FlankSize  = $time * $V_Href->{UKreadsFlankRegUnit};
+        my $PhaHetMutC = $time * $V_Href->{UKreadsMaxPhasedHetMut};
         for my $Ach (sort keys %rOB){
             # extract phased Het-Mut in 5/3 prime flanking region
             my $phMutOB_p5_Aref = PosToPhasedMut( chr => $mSeg{$Ach}, pos => $mPos{$Ach}, ext => -1 * $FlankSize  );
@@ -294,7 +300,7 @@ sub get_rOBpair_HapLinkCount{
         # find HapLink or last time
         my $hapCombCnt = scalar(keys %HapLinkCount);
         if(    $hapCombCnt
-            || $time == $FlankTimes
+            || $time == $V_Href->{UKreadsFlankRegUnitMaxTimes}
         ){
             my $mark = $hapCombCnt ? 'RegionPhased' : 'RegionNotPhased';
             $mark .= ";($mSeg{$_}"

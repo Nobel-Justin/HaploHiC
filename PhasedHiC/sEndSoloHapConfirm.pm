@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.03";
-$DATE = '2018-11-01';
+$VERSION = "0.04";
+$DATE = '2018-11-22';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -82,17 +82,17 @@ sub getTODOpairBamHrefArray{
 ## here, deal with all phMut-sEnd-h[x],
 ## as they will be reload to fill the phased-PE-contact for next dEnd-unknown PE hapAssign
 sub confirm_sEndSoloHapPE_HapLink{
-    # all bams or selected
-    my @TODOpairBamHref = &getTODOpairBamHrefArray;
-    # prepare getHap.bam name
+    # prepare getHap.bam name of all source bams
     for my $hapIdx (1 .. $V_Href->{haploCount}){
         my $tag = "phMut-sEnd-h$hapIdx";
-        &prepare_getHapBamName(pairBamHref => $_, tag => $tag, hapID => "h$hapIdx", splitBam => $_->{splitBam}->{$tag}) for @TODOpairBamHref;
+        &prepare_getHapBamName(pairBamHref => $_, tag => $tag, hapID => "h$hapIdx", splitBam => $_->{splitBam}->{$tag}) for @{$V_Href->{PairBamFiles}};
     }
 
     # start from step after current step
     return if $V_Href->{stepToStart} > 2;
 
+    # all bams or selected
+    my @TODOpairBamHref = &getTODOpairBamHrefArray;
     # fork manager
     my $pm;
     my $forkNum = min( $V_Href->{forkNum}, scalar(@TODOpairBamHref) );
@@ -228,7 +228,7 @@ sub assign_sEndUKend_haplotype{
     my $hasHap_rOB = $rOB_sortAref->[$hasHapIdx];
     my $nonHap_rOB = $rOB_sortAref->[$nonHapIdx];
     my $hasHapID   = $hasHap_rOB->get_SuppHaploStr;
-    # get haplo link countof paired rOB, <needs to sort again>
+    # get haplo link count of paired rOB, <needs to sort again>
     my ($HapLinkC_Href, $mark) = get_rOBpair_HapLinkCount(rOB_a => $hasHap_rOB, rOB_b => $nonHap_rOB);
     # only keep pre-set hapID combination
     my $regex = $hasHapIdx < $nonHapIdx ? "^$hasHapID," : ",$hasHapID\$";
@@ -236,12 +236,12 @@ sub assign_sEndUKend_haplotype{
     ## once empty, reset mark
     my @HapComb = sort keys %$HapLinkC_Href;
     my $HapCombCnt = scalar(@HapComb);
-    $mark = "LackRequiredHapLink($hasHapID)" unless $HapCombCnt;
+    $mark .= ";LackRequiredHapLink($hasHapID)" unless $HapCombCnt;
     # assign HapID to nonHap_rOB
     my $assHapID;
     my $assignMethod;
     ## if empty, just set as haplo-intra
-    if( $mark !~ '^RegionPhased' ){
+    if($HapCombCnt == 0){ # even it matches 'RegionPhased' tag, still might lack $hasHapID related contacts
         $assHapID = $hasHapID;
         $mark .= ';SetHapIntra';
         $assignMethod = 'rd';

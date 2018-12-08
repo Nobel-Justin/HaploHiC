@@ -25,8 +25,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::Extensions::ShellForJuicer';
 #----- version --------
-$VERSION = "0.04";
-$DATE = '2018-08-05';
+$VERSION = "0.06";
+$DATE = '2018-12-04';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -64,9 +64,8 @@ sub return_HELP_INFO{
        # Options #
 
         # for juicer.sh
-        -ref_v  [s]  version of reference genome. [hg19]
-                       Note: this depends on the contents under 'db_dir'.
-        -enzyme [s]  HindIII or MboI. [MboI]
+        -ref_v  [s]  version of reference genome, see contents under 'db_dir'. <required>
+        -enzyme [s]  enzyme type. <required>
 
         # for juicer_tools dump
         # following parameters could use values concatenated by commas.
@@ -81,7 +80,7 @@ sub return_HELP_INFO{
         # for flux system PBS
         -no_flux     do not append flux job header. [disabled]
         -descp  [s]  description of experiment, enclosed in single quotes.
-        -flux_a [s]  your Flux allocation to submit jobs. [indikar_fluxod]
+        -flux_a [s]  your Flux allocation to submit jobs. [none]
         -flux_q [s]  your Flux queue to submit jobs. [fluxod]
         -jname  [s]  name the job on flux system. ['juicer_{sampleID}']
         -email  [s]  email to inform when job's status changes. [disabled]
@@ -122,7 +121,7 @@ sub Load_moduleVar_to_pubVarPool{
             # settings shared
             [ skip_flux => 0 ],
             [ submit => 0 ],
-            [ Flux_allocation => 'indikar_fluxod' ],
+            [ Flux_allocation => 'none' ], # indikar_fluxod
             [ Flux_queue => 'fluxod' ],
             [ job_name => undef ],
             [ email => undef ],
@@ -130,8 +129,9 @@ sub Load_moduleVar_to_pubVarPool{
             [ walltime_to_run => '3:00:00:00' ],
 
             # setting for 1st step
-            [ enzyme_type => 'MboI' ],
+            [ enzyme_type => undef ],
             [ exp_descp => '' ],
+            [ bwaMEMthreads => 4 ],
 
             # settings for 2nd step
             [ dump_hic_type => 'inter_30' ],
@@ -199,12 +199,13 @@ sub Get_Cmd_Options{
 #--- test para and alert ---
 sub para_alert{
     return  (   $V_Href->{HELP}
-             || ( !defined $V_Href->{juicer_dir} || !-d $V_Href->{juicer_dir} )
-             || ( !defined $V_Href->{db_dir} || !-d $V_Href->{db_dir} )
-             || ( !defined $V_Href->{outdir} || !-d $V_Href->{outdir} )
-             || ( !defined $V_Href->{fqlist} || !-e $V_Href->{fqlist} )
-             ||   !defined $V_Href->{sample}
-             || ( $V_Href->{enzyme_type} ne 'MboI' && $V_Href->{enzyme_type} ne 'HindIII' )
+             || !defined $V_Href->{juicer_dir} || !-d $V_Href->{juicer_dir}
+             || !defined $V_Href->{db_dir} || !-d $V_Href->{db_dir}
+             || !defined $V_Href->{ref_version}
+             || !defined $V_Href->{outdir} || !-d $V_Href->{outdir}
+             || !defined $V_Href->{fqlist} || !-e $V_Href->{fqlist}
+             || !defined $V_Href->{sample}
+             || !defined $V_Href->{enzyme_type}
             );
 }
 
@@ -386,7 +387,7 @@ sub write_shell{
     # juicer
     print PBS "# run juicer\n";
     my $descp_parm = length($V_Href->{exp_descp}) == 0 ? '' : "-a '$V_Href->{exp_descp}'";
-    print PBS "( bash $V_Href->{juicer_sh} -z $V_Href->{GenomeRefFa} -p $V_Href->{chrLenFile} -y $V_Href->{enzyme_site} -d $V_Href->{JuicerTopdir} -D $V_Href->{CPU_dir} -s $V_Href->{enzyme_type} $descp_parm ) && ( date && echo juicer completes )\n";
+    print PBS "( bash $V_Href->{juicer_sh} -t $V_Href->{bwaMEMthreads} -z $V_Href->{GenomeRefFa} -p $V_Href->{chrLenFile} -y $V_Href->{enzyme_site} -d $V_Href->{JuicerTopdir} -D $V_Href->{CPU_dir} -s $V_Href->{enzyme_type} $descp_parm ) && ( date && echo juicer completes )\n";
     print PBS "\n";
     # sam to bam
     print PBS "# convert sam files to bam\n";

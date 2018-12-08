@@ -1,9 +1,9 @@
 {
    "run_juicer" : {
       "mode_NO" : 1,
-      "descp" : "get shell file (Umich Flux System) to run juicer.",
+      "descp" : "set up workspace and shell file to run juicer.",
       "_group" : "-",
-      "_comments" : "get shell (Umich Flux System) to run juicer",
+      "_comments" : "set up workspace and shell file to run juicer (compatible to Umich Flux System)",
       "module" : "HaploHiC::Extensions::ShellForJuicer",
       "main_func" : "shell_to_run_juicer"
    },
@@ -38,5 +38,13 @@
       "module" : "HaploHiC::PhasedHiC::HaploDivideReads",
       "descp" : "divide the diploid haplotype (P/M) Hi-C reads from alignment.",
       "main_func" : "DivideHiCreadsToHaplotypes"
+   },
+   "juicer_db" : {
+      "mode_NO" : 6,
+      "_group" : "-",
+      "_comments" : "generate database for juicer and HaploHiC",
+      "module" : "HaploHiC::Extensions::JuicerDB",
+      "descp" : "make database files for juicer and HaploHiC operations.",
+      "main_func" : "JuicerMakeDBwork"
    }
 }

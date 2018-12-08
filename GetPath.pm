@@ -55,7 +55,7 @@ sub GetPath{
 	    ## $V_Href->{GenomeRefFa} = catfile( $V_Href->{db_dir}, $V_Href->{ref_version}, 'BWA_index', 'Homo_sapiens_assembly'.$ref_version_number.'.fasta' );
 	}
 	if($filekey eq 'enzyme_site'){
-		return catfile($V_Href->{db_dir}, $V_Href->{ref_version}, $V_Href->{enzyme_type}, $V_Href->{ref_version}.'.'.$V_Href->{enzyme_type}.'.txt');
+		return catfile($V_Href->{db_dir}, $V_Href->{ref_version}, 'enzyme_site', $V_Href->{enzyme_type}, $V_Href->{ref_version}.'_'.$V_Href->{enzyme_type}.'.txt');
 	}
 	if($filekey eq 'HeaderForSam'){
 		return catfile($V_Href->{db_dir}, $V_Href->{ref_version}, $V_Href->{ref_version}.'.sam_header');
@@ -64,7 +64,7 @@ sub GetPath{
 		return catfile($V_Href->{juicer_dir}, 'CPU', 'scripts', 'common', 'juicer_tools.jar');
 	}
 	if($filekey eq 'gene_psl'){
-		return catfile($V_Href->{db_dir}, $V_Href->{ref_version}, 'GTF_GenePSL', 'gene.psl');
+		return catfile($V_Href->{db_dir}, $V_Href->{ref_version}, 'Genes', 'gene.psl');
 	}
 	# juicer tools path
 	if($filekey eq 'CPU_dir'){

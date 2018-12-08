@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.12";
-$DATE = '2018-10-31';
+$VERSION = "0.14";
+$DATE = '2018-11-14';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -71,10 +71,10 @@ sub return_HELP_INFO{
        # Tools and Database #
         -samt    [s]  SAMtools. <required>
         -db_dir  [s]  database folder made by 'juicer_db' function. <required>
-        -ref_v   [s]  version of reference genome. [hg19]
-                       Note: this depends on the contents under 'db_dir'.
+        -ref_v   [s]  version of reference genome, see contents under 'db_dir'. <required>
 
        # General Options #
+        -enzyme  [s]  enzyme type. <required>
         -hapct   [i]  N-ploid of the sample. [2]
                        Note: default 2 is for homo sapiens.
         -use_indel    use phased InDels. [disabled]
@@ -97,8 +97,9 @@ sub return_HELP_INFO{
         -qual    [i]  base quality offset. [33]
                        Note: 1) set 33 for Sanger and Illumina 1.8+.
                              2) set 64 for Solexa, Illumina 1.3+ and 1.5+.
-        -min_rd  [s]  minimum distance to determine close alignments from same genomic segment. [1E3]
-                       Note: set this option as the maximum of insert size (i.e., mean+3*SD).
+        -max_rd  [s]  the maximum distance to determine close alignments. [1E3]
+        -use_caln     accept PE-reads whose two ends are close alignments ('-max_rd'). [disabled]
+                       Note: default to put them in 'invalid PE'.
 
        # Options of step NO.2-3 #
         -skipddp      skip de-duplication of phased reads. [disabled]
@@ -106,10 +107,11 @@ sub return_HELP_INFO{
         -ucrfut  [s]  the flanking region to calculate LHDR for PhaUcPE. [1E4]
                        Note: 1) the minimum value allowed is 5E3.
                              2) it's unilateral size, and apply it bilaterally.
-        -ucrftm  [s]  allow to extend the '-ucrfut' time by time till to this times. [1]
+        -ucrftm  [s]  allow to extend the '-ucrfut' time by time till to this times. [10]
                        Note: try next extend only when current flanking region has no phased contacts.
         -ucrpha  [i]  at most use such amount of flanking PhaHetMut to calculate LHDR for PhaUcPE. [5]
                        Note: 1) set 0 to disable, i.e., only '-ucrfut' works.
+                             2) option '-ucrftm' also works on this setting.
         -mpwr    [f]  ratio of '-ucrfut' to set as window size to store phased contacts. [0.1]
                        Note: 1) the less this option is set, the more memory and cpu-time is consumed.
                              2) available interval: (0, 0.5].
@@ -123,7 +125,6 @@ sub return_HELP_INFO{
         -dpbin   [s]  bin size of contacts dump. [1MB]
                        Note: 1) BP   mode allows: 2.5MB, 1MB, 500KB, 250KB, 100KB, 50KB, 25KB, 10KB, 5KB
                              2) FRAG mode allows: 500, 200, 100, 50, 20, 5, 2, 1
-        -enzyme  [s]  enzyme type, only effective in FRAG mode. [MboI]
         -dphpcmb [s]  select any haplo combination matched string set by this option. default to use all.
                        Note: e.g., use 'Intra' to get intra-haplotype contacts of all chromosomes.
                                    use 'Inter' to get inter-haplotype contacts of all chromosomes.
@@ -163,8 +164,8 @@ sub Load_moduleVar_to_pubVarPool{
             [ samtools => undef ],
             [ db_dir => undef ],
             [ GenomeRefFa => undef ],
-            [ enzyme_type => 'MboI' ], # step NO.5
-            [ enzyme_site => undef ], # step NO.5
+            [ enzyme_type => undef ],
+            [ enzyme_site => undef ],
 
             # options
             ## general
@@ -186,7 +187,8 @@ sub Load_moduleVar_to_pubVarPool{
             [ use_spmap => 0 ],
             [ use_sdmap => 0 ],
             [ use_multmap => 0 ],
-            [ min_splitReadGap => 1E3 ],
+            [ maxCloseAlignDist => 1E3 ],
+            [ skipCloseAlignFromInvalid => 0 ],
             # [ use_single_ump => 0 ], # might use supplementary alignments in future
             ## allele on reads
             [ min_baseQ => 20 ],
@@ -200,7 +202,7 @@ sub Load_moduleVar_to_pubVarPool{
             [ phasePEdetails => {} ], # record PE-map info and for de-dup
             [ phasePEcontact => {} ], # just record counts from 'phasePEdetails' hash
             [ UKreadsFlankRegUnit => 1E4 ],
-            [ UKreadsFlankRegUnitMaxTimes => 1 ],
+            [ UKreadsFlankRegUnitMaxTimes => 10 ],
             [ UKreadsMaxPhasedHetMut => 5 ],
             [ SkipDeDupPhasedReads => 0 ],
             ## dump contacts
@@ -280,11 +282,13 @@ sub Get_Cmd_Options{
         "-ref_v:s"  => \$V_Href->{ref_version},
         # options
         ## general
+        "-enzyme:s" => \$V_Href->{enzyme_type},
         "-hapct:i"  => \$V_Href->{haploCount},
         "-fork:i"   => \$V_Href->{forkNum},
         "-st_step:i"=> \$V_Href->{stepToStart},
         "-ed_step:i"=> \$V_Href->{stepToStop},
         "-slbmpf:s" => \@{$V_Href->{SelectBamPref}},
+        "-rbfsize:s"=> \$V_Href->{rOB_AbufferSize}, # hidden option
         ## phased-Mut
         "-use_indel"=> \$V_Href->{use_InDel},
         "-min_idd:i"=> \$V_Href->{min_InDelDist},
@@ -293,8 +297,9 @@ sub Get_Cmd_Options{
         "-use_sp"   => \$V_Href->{use_spmap},
         "-use_sd"   => \$V_Href->{use_sdmap},
         "-use_mm"   => \$V_Href->{use_multmap},
+        "-use_caln" => \$V_Href->{skipCloseAlignFromInvalid},
         # "-use_sgum"   => \$V_Href->{use_single_ump},
-        "-min_rd:s" => \$V_Href->{min_splitReadGap},
+        "-max_rd:s" => \$V_Href->{maxCloseAlignDist},
         ## allele on reads
         "-min_bq:i" => \$V_Href->{min_baseQ},
         "-min_re:i" => \$V_Href->{min_distToRedge},
@@ -309,7 +314,6 @@ sub Get_Cmd_Options{
         ## dump contacts
         "-dpmode:s" => \$V_Href->{dumpMode},
         "-dpbin:s"  => \$V_Href->{dumpBinSize},
-        "-enzyme:s" => \$V_Href->{enzyme_type},
         "-dphpcmb:s"=> \$V_Href->{dumpHapComb},
         # help
         "-h|help"   => \$V_Href->{HELP},
@@ -321,12 +325,13 @@ sub Get_Cmd_Options{
 #--- test para and alert ---
 sub para_alert{
     return  (   $V_Href->{HELP}
-             # || !defined $V_Href->{sampleID}
              || !file_exist(filePath=>$V_Href->{phased_vcf})
              || !defined $V_Href->{outdir}   || !-d $V_Href->{outdir}
              || !defined $V_Href->{samtools} || !-e $V_Href->{samtools}
              || !defined $V_Href->{db_dir}   || !-d $V_Href->{db_dir}
+             || !defined $V_Href->{ref_version}
              || scalar(@{$V_Href->{PairBamList}}) == 0
+             || !defined $V_Href->{enzyme_type}
              || $V_Href->{haploCount} < 2
              || ( $V_Href->{baseQ_offset} != 33 && $V_Href->{baseQ_offset} != 64 )
              || $V_Href->{UKreadsFlankRegUnit} < 5E3
@@ -475,7 +480,7 @@ sub prepare{
     ){
         stout_and_sterr "[INFO]\t".`date`
                              ."\tSelect bam files with below prefixes to operate.\n";
-        stout_and_sterr       "\t$_\n" for @{$V_Href->{SelectBamPref}};
+        stout_and_sterr       "\t$_\n" for sort keys %{$V_Href->{SelectBamPref}};
     }
 
     # delete possible previous results

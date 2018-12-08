@@ -34,8 +34,8 @@ our $V_Href = {
     #++++++++++++++#
 
     MainName => 'HaploHiC.pl',
-    Version => '0.11',
-    Date => '2018-11-01',
+    Version => '0.14',
+    Date => '2018-11-14',
     AUTHOR => 'Wenlong Jia',
     EMAIL => 'wenlongkxm@gmail.com',
 
@@ -58,7 +58,7 @@ our $V_Href = {
     #++++++++++#
 
     # global setting
-    ref_version => 'hg19',
+    ref_version => undef,
     # setting about dump func
     dump_allowNormMtd => {
                             'NONE'  => 1,

@@ -25,8 +25,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::Extensions::JuicerDumpFRAG';
 #----- version --------
-$VERSION = "0.02";
-$DATE = '2018-08-05';
+$VERSION = "0.04";
+$DATE = '2018-11-14';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -56,10 +56,9 @@ sub return_HELP_INFO{
         -topdir [s]  topdir stores juicer results. <required>
                       this func creates '$V_Href->{workspace_name}-<postfix>' folder under topdir.
         -db_dir [s]  database folder made by 'juicer_db' function. <required>
+        -ref_v  [s]  version of reference genome, see contents under 'db_dir'. <required>
 
        # Options #
-        -ref_v  [s]  version of reference genome. [hg19]
-                      Note: this depends on the contents under 'db_dir'.
         -hic_fl [s]  prefix of '.hic' file: 'inter_30' or 'inter'. [inter_30]
         -bin    [s]  bin size. [1]
                       Note: FRAG mode allows: 500, 200, 100, 50, 20, 5, 2, 1
@@ -131,8 +130,8 @@ sub Get_Cmd_Options{
         "-juicer:s" => \$V_Href->{juicer_dir},
         "-topdir:s" => \$V_Href->{JuicerTopdir},
         "-db_dir:s" => \$V_Href->{db_dir},
-        # options
         "-ref_v:s"  => \$V_Href->{ref_version},
+        # options
         "-hic_fl:s" => \$V_Href->{hic_type},
         "-bin:s"    => \$V_Href->{bin_size},
         "-ctype:s"  => \$V_Href->{count_type},
@@ -148,11 +147,12 @@ sub Get_Cmd_Options{
 #--- test para and alert ---
 sub para_alert{
     return  (   $V_Href->{HELP}
-             || ( !defined $V_Href->{juicer_dir} || !-d $V_Href->{juicer_dir} )
-             || ( !defined $V_Href->{JuicerTopdir} || !-d $V_Href->{JuicerTopdir} )
-             || ( !defined $V_Href->{db_dir} || !-d $V_Href->{db_dir} )
-             || !exists( $V_Href->{dump_allowBinSize}->{$V_Href->{dump_resolUnitMode}}->{$V_Href->{bin_size}} )
-             || !exists( $V_Href->{dump_allowNormMtd}->{$V_Href->{norm_method}} )
+             || !defined $V_Href->{juicer_dir} || !-d $V_Href->{juicer_dir}
+             || !defined $V_Href->{JuicerTopdir} || !-d $V_Href->{JuicerTopdir}
+             || !defined $V_Href->{db_dir} || !-d $V_Href->{db_dir}
+             || !defined $V_Href->{ref_version}
+             || !exists $V_Href->{dump_allowBinSize}->{$V_Href->{dump_resolUnitMode}}->{$V_Href->{bin_size}}
+             || !exists $V_Href->{dump_allowNormMtd}->{$V_Href->{norm_method}}
              || ( $V_Href->{hic_type} ne 'inter' && $V_Href->{hic_type} ne 'inter_30' )
              || ( $V_Href->{count_type} ne 'observed' && $V_Href->{count_type} ne 'oe' )
             );
@@ -198,7 +198,9 @@ sub get_merged_dump_frag{
     open (MERGE, Try_GZ_Write($V_Href->{MergedFile})) || die "cannot write merge file: $!\n";
     for my $i ( 0 .. $#chr_Href ){
         my $i_chr = $chr_Href[$i]->{chr};
-        for my $j_chr (sort keys %{$chr_Href[$i]->{frag}}){
+        for my $j ( 0 .. $#chr_Href ){
+            my $j_chr = $chr_Href[$j]->{chr};
+            next unless exists($chr_Href[$i]->{frag}->{$j_chr});
             my $ij_FRAG_file = $chr_Href[$i]->{frag}->{$j_chr};
             open (IJCHR, Try_GZ_Read($ij_FRAG_file)) || die "fail to read ijchr file: $!\n";
             while(<IJCHR>){

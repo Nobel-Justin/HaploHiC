@@ -8,7 +8,8 @@ use List::Util qw/ max min sum /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::Sys qw/ file_exist trible_run_for_success /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
-use BioFuse::Util::Array qw/ Get_Two_Seg_Olen binarySearch /;
+use BioFuse::Util::Array qw/ binarySearch /;
+use BioFuse::Util::Interval qw/ Get_Two_Seg_Olen /;
 use HaploHiC::LoadOn;
 use HaploHiC::GetPath qw/ GetPath /;
 use HaploHiC::Extensions::JuicerDumpBP qw/ load_chr_Things /;
@@ -29,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::Extensions::FRAG2Gene';
 #----- version --------
-$VERSION = "0.06";
-$DATE = '2018-11-01';
+$VERSION = "0.08";
+$DATE = '2018-11-14';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -68,15 +69,14 @@ sub return_HELP_INFO{
                             2) gene-level contacts output in same folder.
                             3) merged.txt result from 'dump_FRAG' function.
         -db_dir [s]  database folder made by 'juicer_db' function. <required>
+        -ref_v  [s]  version of reference genome, see contents under 'db_dir'. <required>
         -output [s]  gene-level contacts output. [optional]
         -glist  [s]  gene list file which you want to deal with ONLY. [optional]
         -regbed [s]  one-based BED list file of region to take into contact map. [optional]
                       Note: use this option to add concerned region(s), e.g., enhancer.
 
        # Options #
-        -ref_v  [s]  version of reference genome. [hg19]
-                      Note: this depends on the contents under 'db_dir'.
-        -enzyme [s]  enzyme type. [MboI]
+        -enzyme [s]  enzyme type. <required>
         -gtype  [s]  gene types (column NO.13) in gene-PSL file. ['protein_coding,lincRNA,miRNA']
         -gextd  [s]  to extend gene region bilaterally. [0]
                       Note: you may consider the promoter and terminator as the gene body, such as 1E3.
@@ -119,7 +119,7 @@ sub Load_moduleVar_to_pubVarPool{
             [ user_region_bed => undef ],
 
             # options
-            [ enzyme_type => 'MboI' ],
+            [ enzyme_type => undef ],
             [ gene_type => 'protein_coding,lincRNA,miRNA' ],
             [ gzip_output => 0 ],
             [ gene_extent => 0 ],
@@ -183,8 +183,9 @@ sub Get_Cmd_Options{
 sub para_alert{
     return  (   $V_Href->{HELP}
              || ! file_exist(filePath=>$V_Href->{frag_contact})
-             || ( !defined $V_Href->{db_dir} || !-d $V_Href->{db_dir} )
-             || ( $V_Href->{enzyme_type} ne 'MboI' && $V_Href->{enzyme_type} ne 'HindIII' )
+             || !defined $V_Href->{db_dir} || !-d $V_Href->{db_dir}
+             || !defined $V_Href->{ref_version}
+             || !defined $V_Href->{enzyme_type}
              || $V_Href->{gene_extent_to_reach} < 0
              || $V_Href->{gene_extent} < 0
              || $V_Href->{minimum_cmp_distance} <= 0
@@ -384,12 +385,14 @@ sub convert_frag_to_gene_contacts{
     for my $type_a ( sort keys %type2Href ){
         my $Href_a = $type2Href{$type_a};
         next if( !exists $Href_a->{$chr_a} );
+        my $chrHref_a = $Href_a->{$chr_a};
         # 'right' side
         for my $type_b ( sort keys %type2Href ){
             my $Href_b = $type2Href{$type_b};
             next if( !exists $Href_b->{$chr_b} );
-            # 'left' gene/region
-            for my $tag_a (sort keys %{$Href_a->{$chr_a}}){
+            my $chrHref_b = $Href_b->{$chr_b};
+            # 'left' gene/region, ascending order frag_index sort
+            for my $tag_a (sort {$chrHref_a->{$a}->{frag_stI} <=> $chrHref_a->{$b}->{frag_stI}} keys %$chrHref_a){
                 # required genes?
                 my $is_tag_a_required_gene = exists $V_Href->{required_gene}->{$tag_a};
                 # filter required genes
@@ -402,11 +405,11 @@ sub convert_frag_to_gene_contacts{
                     next;
                 }
                 # FRAG interval_a
-                my $infoHref_a = $Href_a->{$chr_a}->{$tag_a};
+                my $infoHref_a = $chrHref_a->{$tag_a};
                 my $frag_stI_a = $infoHref_a->{frag_stI};
                 my $frag_edI_a = $infoHref_a->{frag_edI};
-                # 'right' gene/region
-                for my $tag_b (sort keys %{$Href_b->{$chr_b}}){
+                # 'right' gene/region, ascending order frag_index sort
+                for my $tag_b (sort {$chrHref_b->{$a}->{frag_stI} <=> $chrHref_b->{$b}->{frag_stI}} keys %$chrHref_b){
                     # not same gene/region
                     next if( !$V_Href->{is_hInter} && $tag_a eq $tag_b );
                     # if it is ever used in 'left', never use it at 'right'
@@ -424,7 +427,7 @@ sub convert_frag_to_gene_contacts{
                     }
                     # chck overlap (distance)
                     ## ignore inter-haplotype neighbor genes
-                    my $infoHref_b = $Href_b->{$chr_b}->{$tag_b};
+                    my $infoHref_b = $chrHref_b->{$tag_b};
                     if(    !$V_Href->{is_hInter} # allows inter-haplotype same tag
                         && $is_same_chr_bool
                         && Get_Two_Seg_Olen( $infoHref_a->{stpos_ext} || $infoHref_a->{stpos},
@@ -440,11 +443,13 @@ sub convert_frag_to_gene_contacts{
                     my $frag_stI_b = $infoHref_b->{frag_stI};
                     my $frag_edI_b = $infoHref_b->{frag_edI};
                     # prepare compare region pairs
+                    my $reverse = 0;
                     my $cmp_itv;
                     if(    $is_same_chr_bool
                         && $frag_stI_a > $frag_stI_b # must change to small -> large
                     ){
                         $cmp_itv = [ $frag_stI_b, $frag_edI_b, $frag_stI_a, $frag_edI_a ];
+                        $reverse = 1;
                     }
                     else{
                         $cmp_itv = [ $frag_stI_a, $frag_edI_a, $frag_stI_b, $frag_edI_b ];
@@ -465,7 +470,8 @@ sub convert_frag_to_gene_contacts{
                         for my $I_2 ( $cmp_itv->[2] .. $cmp_itv->[3] ){
                             next if !exists $FRAG_Contact_Href->{$I_1}->{$I_2};
                             for my $hapComb (sort keys %{$V_Href->{hapComb}}){
-                                $hapCombToContact{$hapComb} += ($FRAG_Contact_Href->{$I_1}->{$I_2}->{$hapComb} || 0);
+                                my $hapCombToRecord = $reverse ? join(',', (split /,/, $hapComb)[1,0]) : $hapComb;
+                                $hapCombToContact{$hapCombToRecord} += ($FRAG_Contact_Href->{$I_1}->{$I_2}->{$hapComb} || 0);
                             }
                         }
                     }
@@ -630,6 +636,7 @@ sub check_files{
         || !-e $V_Href->{enzyme_site}
     ){
         warn_and_exit "<ERROR>\tPlease make sure the existence of files below.\n"
+                            ."\t$V_Href->{chrLenFile}\n"
                             ."\t$V_Href->{gene_psl}\n"
                             ."\t$V_Href->{enzyme_site}\n";
     }
@@ -651,6 +658,10 @@ sub check_files{
                 warn_and_exit "<ERROR>\tPlease make sure contacts file is from 'FRAG' mode with binSize as 1.\n"
                                     ."\t$V_Href->{frag_contact}\n" if($1 ne 'FRAG' || $2 != 1);
             }
+            if(/^##enzyme:\s(\S+)/){
+                warn_and_exit "<ERROR>\tEnzyme ($1) of contacts file is not input option ($V_Href->{enzyme_type}).\n"
+                                    ."\t$V_Href->{frag_contact}\n" if($V_Href->{enzyme_type} ne $1);
+            }
             if(/^##haploCount:\s(\S+)/){
                 $V_Href->{haploCount} = $1;
                 if($V_Href->{is_hInter}){
@@ -668,7 +679,7 @@ sub check_files{
         $V_Href->{g2g_contact_output} = $V_Href->{frag_contact};
         $V_Href->{g2g_contact_output} =~ s/.gz$//;
         $V_Href->{g2g_contact_output} =~ s/.txt$//;
-        $V_Href->{g2g_contact_output} = $V_Href->{g2g_contact_output} . '.gene-level.contacts.txt';
+        $V_Href->{g2g_contact_output} = $V_Href->{g2g_contact_output} . ".gene-level.gextd$V_Href->{gene_extent}.gextr$V_Href->{gene_extent_to_reach}.contacts.txt";
     }
     else{
         $V_Href->{g2g_contact_output} =~ s/.gz$//;

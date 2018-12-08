@@ -6,6 +6,7 @@ use warnings;
 # basic
 use HaploHiC::LoadOn;
 # functions
+use HaploHiC::Extensions::JuicerDB;
 use HaploHiC::Extensions::ShellForJuicer;
 use HaploHiC::Extensions::JuicerDumpBP;
 use HaploHiC::Extensions::JuicerDumpFRAG;
