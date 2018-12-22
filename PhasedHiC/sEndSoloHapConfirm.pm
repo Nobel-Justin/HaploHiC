@@ -229,60 +229,63 @@ sub assign_sEndUKend_haplotype{
     my $nonHap_rOB = $rOB_sortAref->[$nonHapIdx];
     my $hasHapID   = $hasHap_rOB->get_SuppHaploStr;
     # get haplo link count of paired rOB, <needs to sort again>
-    my ($HapLinkC_Href, $mark) = get_rOBpair_HapLinkCount(rOB_a => $hasHap_rOB, rOB_b => $nonHap_rOB);
-    # only keep pre-set hapID combination
+    ## only keep pre-set hapID combination
     my $regex = $hasHapIdx < $nonHapIdx ? "^$hasHapID," : ",$hasHapID\$";
-    delete $HapLinkC_Href->{$_} for grep !/$regex/, keys %$HapLinkC_Href;
-    ## once empty, reset mark
-    my @HapComb = sort keys %$HapLinkC_Href;
-    my $HapCombCnt = scalar(@HapComb);
-    $mark .= ";LackRequiredHapLink($hasHapID)" unless $HapCombCnt;
+    my ($HapLinkC_Href, $mark) = get_rOBpair_HapLinkCount(rOB_a => $hasHap_rOB, rOB_b => $nonHap_rOB, hapRegex => $regex);
     # assign HapID to nonHap_rOB
-    my $assHapID;
+    ## once local region is not phased, reset mark and loads pre-defined HapLink
     my $assignMethod;
-    ## if empty, just set as haplo-intra
-    if($HapCombCnt == 0){ # even it matches 'RegionPhased' tag, still might lack $hasHapID related contacts
-        $assHapID = $hasHapID;
-        $mark .= ';SetHapIntra';
+    my $isIntraChr = $hasHap_rOB->get_mseg eq $nonHap_rOB->get_mseg;
+    if($mark !~ /^RegionPhased/){
         $assignMethod = 'rd';
+        if($isIntraChr){
+            $HapLinkC_Href->{"$hasHapID,$hasHapID"} = 1;
+            $mark .= ';IntraChrSetHapIntra';
+        }
+        else{
+            $HapLinkC_Href->{$_} = 1 for grep /$regex/, @{$V_Href->{allHapComb}};
+            $mark .= ';InterChrSetAllAvibHap';
+        }
     }
     else{
         $assignMethod = 'ph';
-        my $assHapComb;
-        # if has only single HapComb, just take it
-        if($HapCombCnt == 1){
-            $assHapComb = $HapComb[0];
-            # add mark
-            $mark .= ";SoloHapComb;[$assHapComb](C:$HapLinkC_Href->{$assHapComb})";
-        }
-        else{ # luck draw
-            # prepare haplotype's luck-draw interval
-            my $allCount = 0;
-            my %hapCombDraw;
-            for my $hapComb (@HapComb){
-                $allCount += $HapLinkC_Href->{$hapComb};
-                $hapCombDraw{$hapComb} = $allCount;
-            }
-            # random pick
-            my $luck_draw = int(rand($allCount));
-            $assHapComb = first { $hapCombDraw{$_} > $luck_draw } sort keys %hapCombDraw;
-            # add mark
-            $mark .= ";[$_](C:$HapLinkC_Href->{$_},D:$hapCombDraw{$_})" for keys %hapCombDraw;
-            $mark .= ";RD:$luck_draw";
-        }
-        # remove the pre-set hasHap-ID
-        ($assHapID = $assHapComb) =~ s/$regex//;
     }
+    ## select hapComb
+    my @HapComb = sort keys %$HapLinkC_Href;
+    my $assHapComb;
+    ## if has only single HapComb, just take it
+    if(scalar(@HapComb) == 1){
+        $assHapComb = $HapComb[0];
+        # add mark
+        $mark .= ";SoloHapComb;[$assHapComb](C:$HapLinkC_Href->{$assHapComb})";
+    }
+    else{ # luck draw
+        # prepare haplotype's luck-draw interval
+        my $allCount = 0;
+        my %hapCombDraw;
+        for my $hapComb (@HapComb){
+            $allCount += $HapLinkC_Href->{$hapComb};
+            $hapCombDraw{$hapComb} = $allCount;
+        }
+        # random pick
+        my $luck_draw = int(rand($allCount));
+        $assHapComb = first { $hapCombDraw{$_} > $luck_draw } sort keys %hapCombDraw;
+        # add mark
+        $mark .= ";[$_](C:$HapLinkC_Href->{$_},D:$hapCombDraw{$_})" for keys %hapCombDraw;
+        $mark .= ";RD:$luck_draw";
+    }
+    ## remove the pre-set hasHap-ID
+    (my $assHapID = $assHapComb) =~ s/$regex//;
     ## assign
     $nonHap_rOB->load_SuppHaplo(hapID => $assHapID, allele_OB => 'NULL');
     $nonHap_rOB->addHapIDtoOptfd; # update
     $nonHap_rOB->add_str_to_optfd(str => "\tXU:Z:$mark");
-    # output
-    my $getHapTag = $assHapID eq $hasHapID ? "$tag.${assHapID}Intra" : "$tag.hInter";
     # write PE to getHap.bam files
+    my $getHapTag = $assHapID eq $hasHapID ? "$tag.${assHapID}Intra" : "$tag.hInter";
     print {$pairBamHref->{splitBamFH}->{$getHapTag}} "$_\n" for @{$pe_OB->printSAM};
     # stat
-    $V_Href->{PEsplitStat}->{"$getHapTag.$assignMethod"} ++;
+    my $chrTag = $isIntraChr ? 'IntraChr' : 'InterChr';
+    $V_Href->{PEsplitStat}->{"$getHapTag.$chrTag.$assignMethod"} ++;
 }
 
 #--- find the index in rOB_sortArray of hasHap and nonHap reads_OB ---

@@ -107,11 +107,8 @@ sub return_HELP_INFO{
         -ucrfut  [s]  the flanking region to calculate LHDR for PhaUcPE. [1E4]
                        Note: 1) the minimum value allowed is 5E3.
                              2) it's unilateral size, and apply it bilaterally.
-        -ucrftm  [s]  allow to extend the '-ucrfut' time by time till to this times. [10]
-                       Note: try next extend only when current flanking region has no phased contacts.
         -ucrpha  [i]  at most use such amount of flanking PhaHetMut to calculate LHDR for PhaUcPE. [5]
                        Note: 1) set 0 to disable, i.e., only '-ucrfut' works.
-                             2) option '-ucrftm' also works on this setting.
         -mpwr    [f]  ratio of '-ucrfut' to set as window size to store phased contacts. [0.1]
                        Note: 1) the less this option is set, the more memory and cpu-time is consumed.
                              2) available interval: (0, 0.5].
@@ -140,6 +137,9 @@ sub return_HELP_INFO{
  \n";
         # -sampid  [s]  sample ID. <required>
         # -use_sgum    use pe-reads having one unmapped end. [disabled]
+        # -ucrftm  [s]  allow to extend the '-ucrfut' time by time till to this times. [10]
+        #                Note: try next extend only when current flanking region has no phased contacts.
+                             # 2) option '-ucrftm' also works on this setting.
 }
 
 #--- load variant of this module to public variant (V_Href in LoadOn.pm) ---
@@ -202,7 +202,7 @@ sub Load_moduleVar_to_pubVarPool{
             [ phasePEdetails => {} ], # record PE-map info and for de-dup
             [ phasePEcontact => {} ], # just record counts from 'phasePEdetails' hash
             [ UKreadsFlankRegUnit => 1E4 ],
-            [ UKreadsFlankRegUnitMaxTimes => 10 ],
+            [ UKreadsFlankRegUnitMaxTimes => 10 ], # 2**time
             [ UKreadsMaxPhasedHetMut => 5 ],
             [ SkipDeDupPhasedReads => 0 ],
             ## dump contacts
@@ -218,6 +218,8 @@ sub Load_moduleVar_to_pubVarPool{
             [ chr2enzymePos => {} ],
 
             # intermediate variants
+            [ allHapComb => [] ],
+            [ intraHapComb => [] ],
             [ chrLenFile => undef ],
             [ phasedMut_report => undef ],
             [ VCFmutStat => {
@@ -307,7 +309,7 @@ sub Get_Cmd_Options{
         "-qual:i"   => \$V_Href->{baseQ_offset},
         ## unknown reads operation
         "-ucrfut:s" => \$V_Href->{UKreadsFlankRegUnit},
-        "-ucrftm:i" => \$V_Href->{UKreadsFlankRegUnitMaxTimes},
+        # "-ucrftm:i" => \$V_Href->{UKreadsFlankRegUnitMaxTimes},
         "-ucrpha:i" => \$V_Href->{UKreadsMaxPhasedHetMut},
         "-mpwr:f"   => \$V_Href->{mapPosWinRatio},
         "-skipddp"  => \$V_Href->{SkipDeDupPhasedReads},
@@ -335,7 +337,7 @@ sub para_alert{
              || $V_Href->{haploCount} < 2
              || ( $V_Href->{baseQ_offset} != 33 && $V_Href->{baseQ_offset} != 64 )
              || $V_Href->{UKreadsFlankRegUnit} < 5E3
-             || $V_Href->{UKreadsFlankRegUnitMaxTimes} < 1
+             # || $V_Href->{UKreadsFlankRegUnitMaxTimes} < 1
              || $V_Href->{UKreadsMaxPhasedHetMut} < 0
              || $V_Href->{mapPosWinRatio} <= 0 || $V_Href->{mapPosWinRatio} > 0.5
              || $V_Href->{stepToStart} < 1 || $V_Href->{stepToStart} > $V_Href->{totalStepNO}
@@ -472,6 +474,14 @@ sub prepare{
         ## inform
         stout_and_sterr "[INFO]\t".`date`
                              ."\twindow size to record phased contacts is set as $V_Href->{mapPosWinSize}.\n";
+    }
+
+    # prepare haplotype combination: hx,hx
+    for my $hap_i (1 .. $V_Href->{haploCount}){
+        push @{$V_Href->{intraHapComb}}, "h$hap_i,h$hap_i";
+        for my $hap_j (1 .. $V_Href->{haploCount}){
+            push @{$V_Href->{allHapComb}}, "h$hap_i,h$hap_j";
+        }
     }
 
     # inform selected bam

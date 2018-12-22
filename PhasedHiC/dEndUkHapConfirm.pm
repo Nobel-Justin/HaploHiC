@@ -133,12 +133,19 @@ sub assign_dEndUKend_haplotype{
     # get haplo link count of paired rOB, <do not need sort again>
     my ($HapLinkC_Href, $mark) = get_rOBpair_HapLinkCount(rOB_a => $rOB_sortAref->[0], rOB_b => $rOB_sortAref->[-1], skipSort => 1);
     # assign HapID to both nonHap_rOB
+    ## once local region is not phased, reset mark and loads pre-defined HapLink
     my $assignMethod;
-    ## if empty, just set as haplo-intra
+    my $isIntraChr = $rOB_sortAref->[0]->get_mseg eq $rOB_sortAref->[-1]->get_mseg;
     if($mark !~ /^RegionPhased/){
-        $HapLinkC_Href->{"h$_,h$_"} = 1 for (1 .. $V_Href->{haploCount});
-        $mark .= ';SetHapIntra';
         $assignMethod = 'rd';
+        if($isIntraChr){
+            $HapLinkC_Href->{$_} = 1 for @{$V_Href->{intraHapComb}};
+            $mark .= ';IntraChrSetHapIntra';
+        }
+        else{
+            $HapLinkC_Href->{$_} = 1 for @{$V_Href->{allHapComb}};
+            $mark .= ';InterChrSetAllHap';
+        }
     }
     else{
         $assignMethod = 'ph';
@@ -179,7 +186,8 @@ sub assign_dEndUKend_haplotype{
     # write PE to getHap.bam files
     print {$pairBamHref->{splitBamFH}->{$getHapTag}} "$_\n" for @{$pe_OB->printSAM};
     # stat
-    $V_Href->{PEsplitStat}->{"$getHapTag.$assignMethod"} ++;
+    my $chrTag = $isIntraChr ? 'IntraChr' : 'InterChr';
+    $V_Href->{PEsplitStat}->{"$getHapTag.$chrTag.$assignMethod"} ++;
 }
 
 #--- 

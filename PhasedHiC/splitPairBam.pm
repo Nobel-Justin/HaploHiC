@@ -107,7 +107,7 @@ sub divide_pairBam{
                              ."\ttotally, load $peIdx PE-reads from '$pairBamHref->{prefix}' bam files, and split them OK.\n";
         # write report (1st part)
         open (PESRT, Try_GZ_Write($pairBamHref->{PEsplit_report})) || die "fail write PEtoHaplotype.report: $!\n";
-        print PESRT "$_:\t$V_Href->{PEsplitStat}->{$_}\n" for grep !/^unknown_to_/, sort keys %{$V_Href->{PEsplitStat}};
+        print PESRT "$_:\t$V_Href->{PEsplitStat}->{$_}\n" for sort keys %{$V_Href->{PEsplitStat}};
         close PESRT;
         # fork job finishes
         if( $fork_DO ){ $pm->finish; }

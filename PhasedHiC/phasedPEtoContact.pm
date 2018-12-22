@@ -229,6 +229,7 @@ sub get_rOBpair_HapLinkCount{
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $skipSort = $parm{skipSort} || 0;
+    my $hapRegex = $parm{hapRegex} || undef;
 
     my %HapLinkCount;
     # chr,pos ascending sort
@@ -259,9 +260,10 @@ sub get_rOBpair_HapLinkCount{
     # iteratively find sufficient phased Het-Mut in local flank region
     my $chrHapLinkHref = $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}};
     my %fReg = map { ($_, {pos=>{},mct=>{}}) } keys %rOB;
-    for my $time ( 1 .. $V_Href->{UKreadsFlankRegUnitMaxTimes} ){
-        my $FlankSize  = $time * $V_Href->{UKreadsFlankRegUnit};
-        my $PhaHetMutC = $time * $V_Href->{UKreadsMaxPhasedHetMut};
+    for my $time ( 0 .. $V_Href->{UKreadsFlankRegUnitMaxTimes} ){
+        my $ext_ratio  = 2 ** $time;
+        my $FlankSize  = $ext_ratio * $V_Href->{UKreadsFlankRegUnit};
+        my $PhaHetMutC = $ext_ratio * $V_Href->{UKreadsMaxPhasedHetMut};
         for my $Ach (sort keys %rOB){
             # extract phased Het-Mut in 5/3 prime flanking region
             my $phMutOB_p5_Aref = PosToPhasedMut( chr => $mSeg{$Ach}, pos => $mPos{$Ach}, ext => -1 * $FlankSize  );
@@ -290,12 +292,16 @@ sub get_rOBpair_HapLinkCount{
         %{$pIdx{p5}} = map { ( $_, Pos2Idx(pos => $fReg{$_}{pos}{p5}, winSize => $V_Href->{mapPosWinSize}) ) } keys %fReg;
         %{$pIdx{p3}} = map { ( $_, Pos2Idx(pos => $fReg{$_}{pos}{p3}, winSize => $V_Href->{mapPosWinSize}) ) } keys %fReg;
         for my $pIdx_a ( $pIdx{p5}{a} .. $pIdx{p3}{a} ){
-            next if( ! exists $chrHapLinkHref->{$pIdx_a} );
+            next unless exists $chrHapLinkHref->{$pIdx_a};
             for my $pIdx_b ( $pIdx{p5}{b} .. $pIdx{p3}{b} ){
-                next if( ! exists $chrHapLinkHref->{$pIdx_a}->{$pIdx_b} );
+                next unless exists $chrHapLinkHref->{$pIdx_a}->{$pIdx_b};
                 my $pIdxHapLinkHref = $chrHapLinkHref->{$pIdx_a}->{$pIdx_b};
                 $HapLinkCount{$_} += $pIdxHapLinkHref->{$_} for keys %$pIdxHapLinkHref;
             }
+        }
+        # only keep pre-set hapID combination
+        if(defined $hapRegex){
+            delete $HapLinkCount{$_} for grep !/$hapRegex/, keys %HapLinkCount;
         }
         # find HapLink or last time
         my $hapCombCnt = scalar(keys %HapLinkCount);
@@ -303,8 +309,8 @@ sub get_rOBpair_HapLinkCount{
             || $time == $V_Href->{UKreadsFlankRegUnitMaxTimes}
         ){
             my $mark = $hapCombCnt ? 'RegionPhased' : 'RegionNotPhased';
-            $mark .= ";($mSeg{$_}"
-                    .":$fReg{$_}{pos}{p5}-$fReg{$_}{pos}{p5}"
+            $mark .= ";($ext_ratio"
+                    .",$mSeg{$_}:$fReg{$_}{pos}{p5}-$fReg{$_}{pos}{p5}"
                     .",MCT5p:$fReg{$_}{mct}{p5}"
                     .",MCT3p:$fReg{$_}{mct}{p3})"
                     for sort keys %fReg;
