@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.04";
-$DATE = '2018-11-22';
+$VERSION = "0.05";
+$DATE = '2018-12-22';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';

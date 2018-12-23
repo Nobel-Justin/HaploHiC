@@ -33,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.07";
-$DATE = '2018-11-16';
+$VERSION = "0.08";
+$DATE = '2018-12-23';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -266,8 +266,11 @@ sub get_rOBpair_HapLinkCount{
         my $PhaHetMutC = $ext_ratio * $V_Href->{UKreadsMaxPhasedHetMut};
         for my $Ach (sort keys %rOB){
             # extract phased Het-Mut in 5/3 prime flanking region
-            my $phMutOB_p5_Aref = PosToPhasedMut( chr => $mSeg{$Ach}, pos => $mPos{$Ach}, ext => -1 * $FlankSize  );
-            my $phMutOB_p3_Aref = PosToPhasedMut( chr => $mSeg{$Ach}, pos => $mExp{$Ach}, ext => $FlankSize );
+            my $mSegLen = $V_Href->{ChrThings}->{$mSeg{$Ach}}->{len};
+            my $FlankSize_p5 = max($mPos{$Ach}-$FlankSize, 1       ) - $mPos{$Ach}; # negative value
+            my $FlankSize_p3 = min($mExp{$Ach}+$FlankSize, $mSegLen) - $mExp{$Ach}; # positive value
+            my $phMutOB_p5_Aref = PosToPhasedMut( chr => $mSeg{$Ach}, pos => $mPos{$Ach}, ext => $FlankSize_p5 );
+            my $phMutOB_p3_Aref = PosToPhasedMut( chr => $mSeg{$Ach}, pos => $mExp{$Ach}, ext => $FlankSize_p3 );
             # adjust phased Het-Mut count, if set
             my $phMutOB_p5_C = scalar(@$phMutOB_p5_Aref);
             my $phMutOB_p3_C = scalar(@$phMutOB_p3_Aref);
@@ -284,8 +287,8 @@ sub get_rOBpair_HapLinkCount{
             # record
             $fReg{$Ach}{mct}{p5} = $phMutOB_p5_C;
             $fReg{$Ach}{mct}{p3} = $phMutOB_p3_C;
-            $fReg{$Ach}{pos}{p5} = ( ( $PhaHetMutC && $phMutOB_p5_C == $PhaHetMutC ) ? $phMutOB_p5_Aref->[ 0]->get_pos : $mPos{$Ach}-$FlankSize );
-            $fReg{$Ach}{pos}{p3} = ( ( $PhaHetMutC && $phMutOB_p3_C == $PhaHetMutC ) ? $phMutOB_p3_Aref->[-1]->get_pos : $mExp{$Ach}+$FlankSize );
+            $fReg{$Ach}{pos}{p5} = ( ( $PhaHetMutC && $phMutOB_p5_C == $PhaHetMutC ) ? $phMutOB_p5_Aref->[ 0]->get_pos : $mPos{$Ach}+$FlankSize_p5 );
+            $fReg{$Ach}{pos}{p3} = ( ( $PhaHetMutC && $phMutOB_p3_C == $PhaHetMutC ) ? $phMutOB_p3_Aref->[-1]->get_pos : $mExp{$Ach}+$FlankSize_p3 );
         }
         # extract the haplo link of a/b paired flank regions
         my %pIdx;
@@ -310,7 +313,7 @@ sub get_rOBpair_HapLinkCount{
         ){
             my $mark = $hapCombCnt ? 'RegionPhased' : 'RegionNotPhased';
             $mark .= ";($ext_ratio"
-                    .",$mSeg{$_}:$fReg{$_}{pos}{p5}-$fReg{$_}{pos}{p5}"
+                    .",$mSeg{$_}:$fReg{$_}{pos}{p5}-$fReg{$_}{pos}{p3}"
                     .",MCT5p:$fReg{$_}{mct}{p5}"
                     .",MCT3p:$fReg{$_}{mct}{p3})"
                     for sort keys %fReg;

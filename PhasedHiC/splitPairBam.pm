@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.16";
-$DATE = '2018-11-14';
+$VERSION = "0.17";
+$DATE = '2018-12-22';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
