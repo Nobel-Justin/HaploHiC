@@ -10,7 +10,7 @@ use BioFuse::Util::GZfile qw/ Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
 use HaploHiC::Extensions::FRAG2Gene qw/ load_enzyme_site_list /;
-use HaploHiC::PhasedHiC::phasedPEtoContact qw/ smartBam_PEread load_phasedPE_contacts phasePE_contacts_to_count /;
+use HaploHiC::PhasedHiC::phasedPEtoContact qw/ load_phasedPE_contacts phasePE_contacts_to_count /;
 
 require Exporter;
 
@@ -27,8 +27,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
-$VERSION = "0.01";
-$DATE = '2018-10-30';
+$VERSION = "0.02";
+$DATE = '2018-12-30';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -49,13 +49,14 @@ sub dump_contacts{
     # group merged bam files belonging to each tag (h[x]Intra and hInter)
     my %tagToMergeBam;
     for my $pairBamHref ( @{$V_Href->{PairBamFiles}} ){
-        push @{$tagToMergeBam{$_}}, [$pairBamHref->{prefix}, $pairBamHref->{mergeBam}->{$_}] for sort keys %{$pairBamHref->{mergeBam}};
+        push @{$tagToMergeBam{$_}}, $pairBamHref->{mergeBam}->{$_} for keys %{$pairBamHref->{mergeBam}};
     }
     # use real number of bin_size
     $V_Href->{dumpBinSize} = $V_Href->{dump_allowBinSize}->{$V_Href->{dumpMode}}->{uc($V_Href->{dumpBinSize})};
     # load enzyme sites list in FRAG mode
     load_enzyme_site_list if($V_Href->{dumpMode} eq 'FRAG');
 
+    # all OR specific tags, and check empty
     my @tag = sort keys %tagToMergeBam;
        @tag = grep /$V_Href->{dumpHapComb}/, @tag if defined $V_Href->{dumpHapComb};
     if(@tag == 0){
@@ -64,15 +65,14 @@ sub dump_contacts{
     # deal with bam files of each tag
     for my $tag (@tag){
         $V_Href->{phasePEcontact} = {}; # reset contact container
-        for my $Aref (@{$tagToMergeBam{$tag}}){
-            my ($bamPrefix, $mergeBam) = @$Aref;
+        for my $mergeBam (@{$tagToMergeBam{$tag}}){
             # read phased bam
-            smartBam_PEread(bam => $mergeBam, mark => "'$bamPrefix' $tag", viewOpt => '-F 0x400',
-                            subrtRef => \&load_phasedPE_contacts,
-                            subrtParmAref => [idxFunc=>\&get_contacts_idx]);
+            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&get_contacts_idx]);
+            $mergeBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
             # inform
+            my $mark = $mergeBam->get_tag;
             stout_and_sterr "[INFO]\t".`date`
-                                 ."\tload contacts from $bamPrefix $tag bam OK.\n";
+                                 ."\tload contacts from $mark bam OK.\n";
         }
         # contacts to count
         ## here, do de-dup phased reads (optional)

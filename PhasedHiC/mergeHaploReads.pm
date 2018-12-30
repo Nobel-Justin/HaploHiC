@@ -8,6 +8,7 @@ use File::Spec::Functions qw/ catfile /;
 use List::Util qw/ min /;
 use BioFuse::Util::Sys qw/ file_exist /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
+use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
 require Exporter;
 
@@ -24,8 +25,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::mergeHaploReads';
 #----- version --------
-$VERSION = "0.02";
-$DATE = '2018-10-31';
+$VERSION = "0.03";
+$DATE = '2018-12-30';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -34,6 +35,7 @@ $EMAIL = 'wenlongkxm@gmail.com';
 #--------- functions in this pm --------#
 my @functoion_list = qw/
                         merge_haplo_reads
+                        mergeReadsOfEachHapComb
                      /;
 
 #--- merge reads of each haplotype ---
@@ -41,8 +43,10 @@ my @functoion_list = qw/
 sub merge_haplo_reads{
     # prepare file name of merged bam
     for my $pairBamHref ( @{$V_Href->{PairBamFiles}} ){
+        my $pairBamPrefix = $pairBamHref->{prefix};
         for my $tag (sort keys %{$pairBamHref->{bamToMerge}}){
-            $pairBamHref->{mergeBam}->{$tag} = catfile($V_Href->{outdir}, $pairBamHref->{prefix}.".$tag.bam");
+            my $mergeBamPath = catfile($V_Href->{outdir}, $pairBamPrefix.".$tag.bam");
+            $pairBamHref->{mergeBam}->{$tag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $mergeBamPath, tag => "$pairBamPrefix $tag");
         }
     }
 
@@ -53,49 +57,54 @@ sub merge_haplo_reads{
     my $pm;
     my $forkNum = min( $V_Href->{forkNum}, scalar(@{$V_Href->{PairBamFiles}}) );
     my $fork_DO = ( $forkNum > 1 );
-    if( $fork_DO ){ $pm = new Parallel::ForkManager($forkNum) }
+    if($fork_DO){ $pm = new Parallel::ForkManager($forkNum) }
     # merge haploComb bam
     for my $pairBamHref ( @{$V_Href->{PairBamFiles}} ){
         # fork job starts
-        if( $fork_DO ){ $pm->start and next; }
-        # load reads from each bam
-        my $bamPrefix = $pairBamHref->{prefix};
+        if($fork_DO){ $pm->start and next; }
         # merge each type of hapComb
-        ## h[x]Intra and hInter
-        for my $tag (sort keys %{$pairBamHref->{bamToMerge}}){
-            # open file handle of merged bam
-            open (MEGBAM, "| $V_Href->{samtools} view -b -o $pairBamHref->{mergeBam}->{$tag}") || die "fail write $bamPrefix merge.bam ($tag): $!\n";
-            # merge
-            my $bamToMergeAf = $pairBamHref->{bamToMerge}->{$tag};
-            ## check existence
-            for my $bamToMerge (@$bamToMergeAf){
-                warn_and_exit "<ERROR>\tCannot find bam to merge: $bamToMerge\n" unless file_exist(filePath => $bamToMerge);
-            }
-            ## write SAM-header
-            ## copy original SAM-header from last bam
-            open (BAMH,"$V_Href->{samtools} view -H $bamToMergeAf->[-1] |") || die"fail read SAM header: $!\n";
-            print MEGBAM while(<BAMH>);
-            close BAMH;
-            ## copy reads
-            for my $bamToMerge (@$bamToMergeAf){
-                open (BAM,"$V_Href->{samtools} view $bamToMerge |") || die"fail read bam: $!\n";
-                print MEGBAM while(<BAM>);
-                close BAM;
-            }
-            # close file handle of merged bam
-            close MEGBAM;
-            # inform
-            stout_and_sterr "[INFO]\t".`date`
-                                 ."\tmerge $bamPrefix $tag bam OK.\n";
-        }
+        &mergeReadsOfEachHapComb(pairBamHref => $pairBamHref);
         # fork job finishes
-        if( $fork_DO ){ $pm->finish; }
+        if($fork_DO){ $pm->finish; }
     }
     # collect fork jobs
-    if( $fork_DO ){ $pm->wait_all_children; }
+    if($fork_DO){ $pm->wait_all_children; }
 
     # stop at current step
     exit(0) if $V_Href->{stepToStop} == 4;
+}
+
+#--- merge reads of each hapComb to mergeBam ---
+sub mergeReadsOfEachHapComb{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pairBamHref = $parm{pairBamHref};
+
+    # merge each type of hapComb
+    ## h[x]Intra and hInter
+    for my $tag (sort keys %{$pairBamHref->{bamToMerge}}){
+        # start writing mergedBam
+        my $mergeBam = $pairBamHref->{mergeBam}->{$tag};
+        $mergeBam->start_write(samtools => $V_Href->{samtools});
+        # merge
+        my $bamToMergeAf = $pairBamHref->{bamToMerge}->{$tag};
+        ## write SAM-header
+        ## copy original SAM-header from last bam
+        $mergeBam->write(content => $_) for @{ $bamToMergeAf->[-1]->get_SAMheader(samtools => $V_Href->{samtools}) };
+        ## copy reads
+        for my $bamToMerge (@$bamToMergeAf){
+            my $fh = $bamToMerge->start_read(samtools => $V_Href->{samtools});
+            $mergeBam->write(content => $_) while(<$fh>);
+            close $fh;
+        }
+        # stop writing mergedBam
+        $mergeBam->stop_write;
+        # inform
+        my $mark = $mergeBam->get_tag;
+        stout_and_sterr "[INFO]\t".`date`
+                             ."\tmerge $mark bam OK.\n";
+    }
 }
 
 #--- 
