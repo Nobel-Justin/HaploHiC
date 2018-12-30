@@ -28,8 +28,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::Extensions::JuicerDumpBP';
 #----- version --------
-$VERSION = "0.08";
-$DATE = '2018-11-14';
+$VERSION = "0.09";
+$DATE = '2018-12-26';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -240,7 +240,7 @@ sub make_workspace{
 }
 
 #--- read chromosome info ---
-## also applied by JuicerDumpFRAG.pm
+## applied in dump_BP/dump_FRAG/haplo_div
 sub load_chr_Things{
     # the chrLenFile chr-order is very important, we assume that it is identical to the juicer-order
     open (CHRLEN, $V_Href->{chrLenFile}) || die "fail read chrLenFile: $!\n";
@@ -248,6 +248,7 @@ sub load_chr_Things{
         next if(/^#/);
         my ($chr, $length) = (split)[0, 1];
         $V_Href->{ChrThings}->{$chr} = { chr=>$chr, len=>$length, turn=>$. };
+        push @{$V_Href->{sortedChr}}, $chr;
     }
     close CHRLEN;
 }
