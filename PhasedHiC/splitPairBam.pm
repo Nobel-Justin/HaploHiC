@@ -12,9 +12,10 @@ use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::BioInfo::Quality qw/ baseQ_char2score /;
 use BioFuse::BioInfo::Objects::HicReads_OB;
 use BioFuse::BioInfo::Objects::HicPairEnd_OB;
+use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::Extensions::FRAG2Gene qw/ load_enzyme_site_list /;
-use HaploHiC::PhasedHiC::phasedMutWork qw/ PosToPhasedMut /;
+use HaploHiC::PhasedHiC::phasedMutWork qw/ PosToPhasedMut release_phaseMut_OB /;
 
 require Exporter;
 
@@ -32,7 +33,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
 $VERSION = "0.17";
-$DATE = '2018-12-22';
+$DATE = '2018-12-29';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -43,21 +44,25 @@ my @functoion_list = qw/
                         divide_pairBam
                         loadrOBfromSourceBam
                         rOB_to_peOB
-                        prepareSplitBamName
-                        prepareSplitBamFH
+                        prepareSplitBamObj
+                        startWriteSplitBam
                         PEreads_to_splitBam
                         judge_on_rEnd
                         judge_reads_alignment
                         judge_reads_by_phMut
                         judge_on_PE
                         selectOneFromMultiHap
+                        sortSplitBamByPEcontact
+                        write_peOB_to_chrPairBam
+                        chrPairBamToSortSplitBam
+                        write_sort_peOB_to_newSplitBam
                      /;
 
 #--- load pair bams and divide PE-reads ---
 sub divide_pairBam{
 
     # prepare splitBam name
-    &prepareSplitBamName( pairBamHref => $_ ) for @{$V_Href->{PairBamFiles}};
+    &prepareSplitBamObj(pairBamHref => $_) for @{$V_Href->{PairBamFiles}};
 
     # start from step after current step
     return if $V_Href->{stepToStart} > 1;
@@ -69,54 +74,155 @@ sub divide_pairBam{
     my $pm;
     my $forkNum = min( $V_Href->{forkNum}, scalar(@{$V_Href->{PairBamFiles}}) );
     my $fork_DO = ( $forkNum > 1 );
-    if( $fork_DO ){ $pm = new Parallel::ForkManager($forkNum) }
+    if($fork_DO){ $pm = new Parallel::ForkManager($forkNum) }
     # read paired bam files and split
-    for my $bam_i ( 0 .. scalar(@{$V_Href->{PairBamFiles}})-1 ){
+    for my $pairBamHref (@{$V_Href->{PairBamFiles}}){
         # fork job starts
-        if( $fork_DO ){ $pm->start and next; }
-        # prepare split-bams
-        my $pairBamHref = $V_Href->{PairBamFiles}->[$bam_i];
-        # open splitBamFileHandle
-        &prepareSplitBamFH( pairBamHref => $pairBamHref );
-        # read source pair BAMs
-        my (%rOBbuff) = ( 1=>[], 2=>[] );
-        my $peIdx = 0;
-        my $peIdxInform = $V_Href->{peC_ReportUnit};
-        ## FLAG: 0x100(sd), 0x400(d), 0x800(sp)
-        ## WEDO: -F 0x400(d), as 'sd' and 'sp' alignments is important in HiC
-        my %SourBamFH;
-        open ($SourBamFH{1},"$V_Href->{samtools} view -F 0x400 $pairBamHref->{R1_bam} |") || die"fail read R1_bam: $!\n";
-        open ($SourBamFH{2},"$V_Href->{samtools} view -F 0x400 $pairBamHref->{R2_bam} |") || die"fail read R2_bam: $!\n";
-        while(1){
-            # load rOB from source bam
-            my $fileEnd = &loadrOBfromSourceBam(SourBamFH_Hf => \%SourBamFH, rBuff_Hf => \%rOBbuff);
-            # load PE-object
-            my %pe_OB;
-            &rOB_to_peOB(rBuff_Hf => \%rOBbuff, peOB_Hf => \%pe_OB, fileEnd => $fileEnd, bam_i => $bam_i, peIdx_Sf => \$peIdx, peIdxInform_Sf => \$peIdxInform);
-            # output PE reads to split bam files
-            &PEreads_to_splitBam(pe_OB => $pe_OB{$_}, splitBamFH_Href => $pairBamHref->{splitBamFH}) for sort {$a<=>$b} keys %pe_OB;
-            # stop when both bam files finish reading
-            last if $fileEnd;
-        }
-        # close file-handles
-        close $_ for values %SourBamFH;
-        close $_ for values %{$pairBamHref->{splitBamFH}};
-        $pairBamHref->{splitBamFH} = {}; # empty splitBamFH key
-        # inform
-        stout_and_sterr "[INFO]\t".`date`
-                             ."\ttotally, load $peIdx PE-reads from '$pairBamHref->{prefix}' bam files, and split them OK.\n";
-        # write report (1st part)
-        open (PESRT, Try_GZ_Write($pairBamHref->{PEsplit_report})) || die "fail write PEtoHaplotype.report: $!\n";
-        print PESRT "$_:\t$V_Href->{PEsplitStat}->{$_}\n" for sort keys %{$V_Href->{PEsplitStat}};
-        close PESRT;
+        if($fork_DO){ $pm->start and next }
+        # distribute Hi-C PE-reads from source pairBam to different splitBam
+        # &SourceToSplitBam(pairBamHref => $pairBamHref); # debug
+        # sort split.bam, sEnd and unknown
+        ## use fork_DO to determine how to release memory
+        &sortSplitBamByPEcontact(pairBamHref => $pairBamHref, fork_DO => $fork_DO);
         # fork job finishes
-        if( $fork_DO ){ $pm->finish; }
+        if($fork_DO){ $pm->finish }
     }
     # collect fork jobs
-    if( $fork_DO ){ $pm->wait_all_children; }
+    if($fork_DO){ $pm->wait_all_children }
+
+    # release memory
+    ## reload in HaploHiC::PhasedHiC::dumpContacts if need
+    $V_Href->{chr2enzymePos} = undef;
 
     # stop at current step
     exit(0) if $V_Href->{stepToStop} == 1;
+}
+
+#--- prepare split-bam objects ---
+# tags:
+## t1, phMut-dEnd-hx:     PE-reads, two ends support same single-haplo.
+## t2, phMut-dEnd-hInter: PE-reads, two ends support diff haplotypes (Note: no matter hetMut(s) on one end or two ends).
+## t3, phMut-sEnd-hx:     PE-reads, one end  supports single-haplo, another end is unknown. (Note: might assign to hInter)
+## t4, phMut-sEnd-hInter: PE-reads, one end  supports  multi-haplo, another end is unknown. (Note: must have supplementary alignment)
+## t5, discarded: reads filtered out due to um/mm/sd/sp (depends on options), or at least one end ONLY mapped to chr not needed
+## t6, unknown: reads qualified but covering none haplotype.  (Note: assign to hx/hInter later)
+## t7, invalid: invalid Hi-C PE (same fragment or [close alignment])
+sub prepareSplitBamObj{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pairBamHref = $parm{pairBamHref};
+
+    my $pairBamPrefix = $pairBamHref->{prefix};
+    # HaploHiC workspace for this pairBam
+    $pairBamHref->{workSpace} = catfile( $V_Href->{outdir}, $pairBamPrefix.'-workspace' );
+    (-d $pairBamHref->{workSpace}) || `mkdir -p $pairBamHref->{workSpace}`;
+    # HaploHiC report for this pairBam
+    $pairBamHref->{PEsplit_report} = catfile( $V_Href->{outdir}, $pairBamPrefix.'.PEtoHaplotype.report' );
+
+    # series of split-bam files with different tags
+    ## t1,t3: <haplo> bam of phMut (single-haplo) covered reads
+    my @tags = map {("phMut-dEnd-h$_" , "phMut-sEnd-h$_")} (1 .. $V_Href->{haploCount});
+    ## t2,t4: <haplo> bam of phMut (multi-haplo) covered reads
+    push @tags, "phMut-dEnd-hInter", "phMut-sEnd-hInter";
+    ## t5: bam of discarded reads
+    push @tags, "discarded";
+    ## t6: bam of haplo-unknown reads
+    push @tags, "unknown";
+    ## t7: invalid Hi-C PE
+    push @tags, "invalid";
+    # record split-bam objects
+    for my $tag (@tags){
+        my $splitBamPath = catfile($pairBamHref->{workSpace}, $pairBamPrefix.".$tag.bam");
+        $pairBamHref->{splitBam}->{$tag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $splitBamPath, tag => "$pairBamPrefix $tag");
+    }
+
+    # prepare bam for final merge
+    ## here includes t1,t2,t4
+    push @{$pairBamHref->{bamToMerge}->{"merge.h${_}Intra"}}, $pairBamHref->{splitBam}->{"phMut-dEnd-h$_"} for (1 .. $V_Href->{haploCount});
+    push @{$pairBamHref->{bamToMerge}->{"merge.hInter"}}, $pairBamHref->{splitBam}->{$_} for ("phMut-dEnd-hInter", "phMut-sEnd-hInter");
+}
+
+#--- distribute reads to splitBam from source pairBam ---
+sub SourceToSplitBam{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pairBamHref = $parm{pairBamHref};
+
+    # open splitBam's FileHandle and write header
+    &startWriteSplitBam(pairBamHref => $pairBamHref);
+
+    # read source pair BAMs
+    my (%rOBbuff) = ( 1=>[], 2=>[] );
+    my $peIdx = 0;
+    my $peIdxInform = $V_Href->{peC_ReportUnit};
+    ## FLAG: 0x100(sd), 0x400(d), 0x800(sp)
+    ## WEDO: -F 0x400(d), as 'sd' and 'sp' alignments is important in HiC
+    my %SourBamFH;
+    $SourBamFH{1} = $pairBamHref->{R1_bam}->start_read(samtools => $V_Href->{samtools}, viewOpt => '-F 0x400');
+    $SourBamFH{2} = $pairBamHref->{R2_bam}->start_read(samtools => $V_Href->{samtools}, viewOpt => '-F 0x400');
+    while(1){
+        # load rOB from source bam
+        my $fileEnd = &loadrOBfromSourceBam(SourBamFH_Hf => \%SourBamFH, rBuff_Hf => \%rOBbuff);
+        # load PE-object
+        my %pe_OB;
+        &rOB_to_peOB(rBuff_Hf => \%rOBbuff, peOB_Hf => \%pe_OB,
+                     fileEnd => $fileEnd, pairBamHref => $pairBamHref,
+                     peIdx_Sf => \$peIdx, peIdxInform_Sf => \$peIdxInform);
+        # output PE reads to split bam files
+        &PEreads_to_splitBam(pe_OB => $pe_OB{$_}, pairBamHref => $pairBamHref) for sort {$a<=>$b} keys %pe_OB;
+        # stop when both bam files finish reading
+        last if $fileEnd;
+    }
+    # close file-handles
+    close $_ for values %SourBamFH;
+    $_->stop_write for values %{$pairBamHref->{splitBam}};
+    # inform
+    stout_and_sterr "[INFO]\t".`date`
+                         ."\ttotally, load $peIdx PE-reads from '$pairBamHref->{prefix}' bam files, and split them OK.\n";
+
+    # write report (1st part)
+    open (PESRT, Try_GZ_Write($pairBamHref->{PEsplit_report})) || die "fail write PEtoHaplotype.report: $!\n";
+    print PESRT "$_:\t$V_Href->{PEsplitStat}->{$_}\n" for sort keys %{$V_Href->{PEsplitStat}};
+    close PESRT;
+}
+
+#--- start writing split-bam (file-w-handle, SAM-header) ---
+sub startWriteSplitBam{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pairBamHref = $parm{pairBamHref};
+
+    # prepare SAM-header
+    my $R1_bam = $pairBamHref->{R1_bam};
+    my $HeadStr = join('', grep {/^\@SQ/ || /^\@RG/} @{ $R1_bam->get_SAMheader(samtools => $V_Href->{samtools}) });
+    ## more in PG info
+    my $PG_info  = "\@PG\tID:$MODULE_NAME\tPN:haplo_div\tVN:$VERSION\tCL:$V_Href->{MainName} haplo_div";
+       # $PG_info .= " -sampid $V_Href->{sampleID}";
+       $PG_info .= " -phsvcf $V_Href->{phased_vcf}";
+       $PG_info .= " -outdir $V_Href->{outdir}";
+       $PG_info .= " -bam $_" for @{$V_Href->{PairBamList}};
+       $PG_info .= " -samt $V_Href->{samtools}";
+       $PG_info .= " -db_dir $V_Href->{db_dir}";
+       $PG_info .= " -ref_v $V_Href->{ref_version}";
+       $PG_info .= " -hapct $V_Href->{haploCount}";
+       $PG_info .= " -use_indel" if($V_Href->{use_InDel});
+       $PG_info .= " -use_sp" if($V_Href->{use_spmap});
+       $PG_info .= " -use_sd" if($V_Href->{use_sdmap});
+       $PG_info .= " -use_mm" if($V_Href->{use_multmap});
+       $PG_info .= " -min_mq $V_Href->{min_mapQ}";
+       $PG_info .= " -min_bq $V_Href->{min_baseQ}";
+       $PG_info .= " -min_re $V_Href->{min_distToRedge}";
+       $PG_info .= " -qual $V_Href->{baseQ_offset}";
+    $HeadStr .= "$PG_info\n";
+
+    # open split-bam file handles
+    for my $splitBam (values %{$pairBamHref->{splitBam}}){
+        $splitBam->start_write(samtools => $V_Href->{samtools});
+        $splitBam->write(content => $HeadStr);
+    }
 }
 
 #--- load reads OB to buff from source bam pair ---
@@ -147,14 +253,14 @@ sub rOB_to_peOB{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
+    my $pairBamHref = $parm{pairBamHref};
     my $rBuff_Hf = $parm{rBuff_Hf};
     my $peOB_Hf = $parm{peOB_Hf};
     my $fileEnd = $parm{fileEnd};
-    my $bam_i = $parm{bam_i};
     my $peIdx_Sf = $parm{peIdx_Sf};
     my $peIdxInform_Sf = $parm{peIdxInform_Sf};
 
-    my $pairBamHref = $V_Href->{PairBamFiles}->[$bam_i];
+    my $bam_no = $pairBamHref->{no};
     # get last PE-id
     my %LastPid = map { ( ($fileEnd ? '__NA__' : $rBuff_Hf->{$_}->[-1]->get_pid), 1 ) } (1,2);
     # get shared PE-id
@@ -177,7 +283,7 @@ sub rOB_to_peOB{
             if( !exists $pid2idx{$pid} ){
                 $$peIdx_Sf++;
                 $pid2idx{$pid} = $$peIdx_Sf;
-                $peOB_Hf->{$$peIdx_Sf} = BioFuse::BioInfo::Objects::HicPairEnd_OB->new( pe_Idx => "$bam_i-$$peIdx_Sf" );
+                $peOB_Hf->{$$peIdx_Sf} = BioFuse::BioInfo::Objects::HicPairEnd_OB->new( pe_Idx => "$bam_no-$$peIdx_Sf" );
             }
             # load rOB to pe_OB
             $peOB_Hf->{$pid2idx{$pid}}->load_reads_OB( reads_OB => $rOB );
@@ -191,84 +297,6 @@ sub rOB_to_peOB{
                              ."\tload $$peIdxInform_Sf PE-reads from '$pairBamHref->{prefix}' bam files.\n";
         $$peIdxInform_Sf += $V_Href->{peC_ReportUnit};
     }
-}
-
-#--- prepare split-bam (file-name) ---
-# tags:
-## t1, phMut-dEnd-hx:     PE-reads, two ends support same single-haplo.
-## t2, phMut-dEnd-hInter: PE-reads, two ends support diff haplotypes (Note: no matter hetMut(s) on one end or two ends).
-## t3, phMut-sEnd-hx:     PE-reads, one end  supports single-haplo, another end is unknown. (Note: might assign to hInter)
-## t4, phMut-sEnd-hInter: PE-reads, one end  supports  multi-haplo, another end is unknown. (Note: must have supplementary alignment)
-## t5, discarded: reads filtered out due to um/mm/sd/sp (depends on options), or at least one end ONLY mapped to chr not needed
-## t6, unknown: reads qualified but covering none haplotype.  (Note: assign to hx/hInter latter)
-## t7, invalid: invalid Hi-C PE (same fragment or [close alignment])
-sub prepareSplitBamName{
-    # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
-    my %parm = @_;
-    my $pairBamHref = $parm{pairBamHref};
-
-    ## t1,t3: <haplo> bam of phMut (single-haplo) covered reads
-    my @tags = map {("phMut-dEnd-h$_" , "phMut-sEnd-h$_")} (1 .. $V_Href->{haploCount});
-    ## t2,t4: <haplo> bam of phMut (multi-haplo) covered reads
-    push @tags, "phMut-dEnd-hInter", "phMut-sEnd-hInter";
-    ## t5: bam of discarded reads
-    push @tags, "discarded";
-    ## t6: bam of haplo-unknown reads
-    push @tags, "unknown";
-    ## t7: invalid Hi-C PE
-    push @tags, "invalid";
-    # workspace
-    $pairBamHref->{workSpace} = catfile( $V_Href->{outdir}, $pairBamHref->{prefix}.'-workspace' );
-    (-d $pairBamHref->{workSpace}) || `mkdir -p $pairBamHref->{workSpace}`;
-    # split-bam files
-    $pairBamHref->{splitBam}->{$_} = catfile( $pairBamHref->{workSpace}, $pairBamHref->{prefix}.".$_.bam" ) for @tags;
-    # report
-    $pairBamHref->{PEsplit_report} = catfile( $V_Href->{outdir}, $pairBamHref->{prefix}.'.PEtoHaplotype.report' );
-    # prepare bam to final merge
-    push @{$pairBamHref->{bamToMerge}->{"merge.h${_}Intra"}}, $pairBamHref->{splitBam}->{"phMut-dEnd-h$_"} for (1 .. $V_Href->{haploCount});
-    push @{$pairBamHref->{bamToMerge}->{"merge.hInter"}}, $pairBamHref->{splitBam}->{$_} for ("phMut-dEnd-hInter", "phMut-sEnd-hInter");
-}
-
-#--- start writing to split-bam (file-w-handle, SAM-header) ---
-sub prepareSplitBamFH{
-    # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
-    my %parm = @_;
-    my $pairBamHref = $parm{pairBamHref};
-
-    # open split-bam file handles
-    for my $tag (sort keys %{$pairBamHref->{splitBam}}){
-        open ($pairBamHref->{splitBamFH}->{$tag}, "| $V_Href->{samtools} view -b -o $pairBamHref->{splitBam}->{$tag}")
-          || die "fail write $pairBamHref->{prefix} split.bam ($tag): $!\n";
-    }
-    # write SAM-header
-    ## copy original SAM-header
-    open (BAMH,"$V_Href->{samtools} view -H $pairBamHref->{R1_bam} |") || die"fail read header of R1_bam: $!\n";
-    while( my $Hline = <BAMH> ){
-        next unless( $Hline =~ /^\@SQ/ || $Hline =~ /^\@RG/ );
-        print {$_} $Hline for values %{$pairBamHref->{splitBamFH}};
-    }
-    close BAMH;
-    ## more in PG info
-    my $PG_info  = "\@PG\tID:$MODULE_NAME\tPN:haplo_div\tVN:$VERSION\tCL:$V_Href->{MainName} haplo_div";
-       # $PG_info .= " -sampid $V_Href->{sampleID}";
-       $PG_info .= " -phsvcf $V_Href->{phased_vcf}";
-       $PG_info .= " -outdir $V_Href->{outdir}";
-       $PG_info .= " -bam $_" for @{$V_Href->{PairBamList}};
-       $PG_info .= " -samt $V_Href->{samtools}";
-       $PG_info .= " -db_dir $V_Href->{db_dir}";
-       $PG_info .= " -ref_v $V_Href->{ref_version}";
-       $PG_info .= " -hapct $V_Href->{haploCount}";
-       $PG_info .= " -use_indel" if($V_Href->{use_InDel});
-       $PG_info .= " -use_sp" if($V_Href->{use_spmap});
-       $PG_info .= " -use_sd" if($V_Href->{use_sdmap});
-       $PG_info .= " -use_mm" if($V_Href->{use_multmap});
-       $PG_info .= " -min_mq $V_Href->{min_mapQ}";
-       $PG_info .= " -min_bq $V_Href->{min_baseQ}";
-       $PG_info .= " -min_re $V_Href->{min_distToRedge}";
-       $PG_info .= " -qual $V_Href->{baseQ_offset}";
-    print {$_} "$PG_info\n" for values %{$pairBamHref->{splitBamFH}};
 }
 
 #--- distribute PE-reads to different categories ---
@@ -288,7 +316,7 @@ sub PEreads_to_splitBam{
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $pe_OB = $parm{pe_OB};
-    my $splitBamFH_Href = $parm{splitBamFH_Href};
+    my $pairBamHref = $parm{pairBamHref};
 
     # make judgement on each reads-end
     my %hap2phMut;
@@ -322,7 +350,7 @@ sub PEreads_to_splitBam{
         $_ .= "\tXM:Z:".join('|',@all_hapInfo) for @$peSAM_Aref;
     }
     ## output
-    print {$splitBamFH_Href->{$SplitBam_tag}} "$_\n" for @$peSAM_Aref;
+    $pairBamHref->{splitBam}->{$SplitBam_tag}->write(content => join("\n",@$peSAM_Aref)."\n");
     ## stat
     $V_Href->{PEsplitStat}->{$SplitBam_tag} ++;
 }
@@ -747,6 +775,126 @@ sub selectOneFromMultiHap{
         }
     }
     return $selectHapID;
+}
+
+#--- sort split.bam for next local region haplo-division ---
+## t3(phMut-sEnd-hx) and t6(unknown)
+sub sortSplitBamByPEcontact{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pairBamHref = $parm{pairBamHref};
+    my $fork_DO = $parm{fork_DO};
+
+    # try to release memory firstly
+    if($fork_DO){ # in child-process
+        $V_Href->{PhasedMut} = undef;
+    }
+    else{ # in main-process
+        release_phaseMut_OB; # this will also do agian after this step
+    }
+    ## reload in HaploHiC::PhasedHiC::dumpContacts if need
+    $V_Href->{chr2enzymePos} = undef;
+
+    ## t1,t3: <haplo> bam of phMut (single-haplo) covered reads
+    my @tags = map {("phMut-sEnd-h$_")} (1 .. $V_Href->{haploCount});
+    ## t6: bam of haplo-unknown reads
+    push @tags, "unknown";
+
+    for my $tag (@tags){
+        my $splitBam = $pairBamHref->{splitBam}->{$tag};
+        # temp workspace
+        my $sortTempDir = $splitBam->get_filepath . '-sortTEMPdir';
+        `mkdir -p $sortTempDir`;
+        # read $tag split bam, and write peOB to chr-pair bams
+        my %chrPairBam;
+        my @subrtOpt = (subrtRef => \&write_peOB_to_chrPairBam,
+                        subrtParmAref => [chrPairBamHf => \%chrPairBam, splitBam => $splitBam, sortTempDir => $sortTempDir]);
+        $splitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, @subrtOpt);
+        # close chr-pair bams
+        $_->stop_write for values %chrPairBam;
+        # load chr-pair bam and sort corrdinates to splitBam
+        my $mark = $splitBam->get_tag;
+        &chrPairBamToSortSplitBam(chrPairBamHf => \%chrPairBam, splitBam => $splitBam, mark => $mark);
+        # sweep
+        `rm -rf $sortTempDir`;
+        # inform
+        stout_and_sterr "[INFO]\t".`date`
+                             ."\tsort $mark bam OK.\n";
+    }
+}
+
+#--- put given peOB to its chr-pair bam ---
+sub write_peOB_to_chrPairBam{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pe_OB = $parm{pe_OB};
+    my $chrPairBamHf = $parm{chrPairBamHf};
+    my $splitBam = $parm{splitBam};
+    my $sortTempDir = $parm{sortTempDir};
+
+    # sorted chr-pair
+    my $rOB_Af = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+    my $chrPairTag = join('-', $rOB_Af->[0]->get_mseg, $rOB_Af->[-1]->get_mseg);
+    # check chr-pair bam
+    unless(exists $chrPairBamHf->{$chrPairTag}){
+        $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => catfile($sortTempDir, "$chrPairTag.bam"));
+        $chrPairBamHf->{$chrPairTag}->start_write(samtools => $V_Href->{samtools});
+        $chrPairBamHf->{$chrPairTag}->write(content => $_) for @{ $splitBam->get_SAMheader(samtools => $V_Href->{samtools}) };
+    }
+    # write to chr-pair bam
+    $chrPairBamHf->{$chrPairTag}->write(content => join("\n",@{$pe_OB->printSAM})."\n");
+}
+
+#--- sort chrPair bams and write to new split bam ---
+sub chrPairBamToSortSplitBam{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $splitBam = $parm{splitBam};
+    my $chrPairBamHf = $parm{chrPairBamHf};
+    my $mark = $parm{mark};
+
+    # start to write new split bam
+    my $SAMheadAf = $splitBam->get_SAMheader(samtools => $V_Href->{samtools});
+    $splitBam->start_write(samtools => $V_Href->{samtools});
+    $splitBam->write(content => $_) for @$SAMheadAf;
+    # sort each chrPair bam and write to new split bam
+    my $chrCount = scalar @{$V_Href->{sortedChr}};
+    for my $i (0 .. $chrCount-1){
+        my $chr_a = $V_Href->{sortedChr}->[$i];
+        for my $j ($i .. $chrCount-1){
+            my $chr_b = $V_Href->{sortedChr}->[$j];
+            my $chrPairTag = "$chr_a-$chr_b";
+            next unless exists $chrPairBamHf->{$chrPairTag};
+            my @subrtOpt = (subrtRef => \&write_sort_peOB_to_newSplitBam, subrtParmAref => [splitBam => $splitBam]);
+            $chrPairBamHf->{$chrPairTag}->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC',
+                                                          mark => "$mark $chrPairTag", quiet => 1, simpleLoad => 1,
+                                                          peOB_AbufferSize => 5E6, deal_peOB_pool => 1, @subrtOpt);
+        }
+    }
+    # close new split bam
+    $splitBam->stop_write;
+}
+
+#--- sort pe-OB (pool) and write new split bam ---
+sub write_sort_peOB_to_newSplitBam{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pe_OB_poolAf = $parm{pe_OB_poolAf};
+    my $splitBam = $parm{splitBam};
+
+    # map idx to sort_rOB
+    my @peCoord;
+    for my $i (0 .. scalar(@$pe_OB_poolAf)-1){
+        # get chr-pos ascending sorted all mapped reads_OB
+        my $rOB_Af = $pe_OB_poolAf->[$i]->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+        push @peCoord, [$i, $rOB_Af->[0]->get_mpos, $rOB_Af->[-1]->get_mpos];
+    }
+    # sort by pos and write to new split bam
+    $splitBam->write(content => join("\n",@{$pe_OB_poolAf->[$_->[0]]->printSAM})."\n") for sort {$a->[1] <=> $b->[1] || $a->[2] <=> $b->[2]} @peCoord;
 }
 
 #--- 

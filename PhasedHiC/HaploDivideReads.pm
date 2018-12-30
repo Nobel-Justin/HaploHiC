@@ -7,6 +7,7 @@ use File::Basename;
 use List::Util qw/ max /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::Sys qw/ file_exist trible_run_for_success /;
+use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::GetPath qw/ GetPath /;
 use HaploHiC::Extensions::JuicerDumpBP qw/ load_chr_Things /;
@@ -33,7 +34,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
 $VERSION = "0.15";
-$DATE = '2018-12-23';
+$DATE = '2018-12-30';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -232,15 +233,15 @@ sub Load_moduleVar_to_pubVarPool{
                                 i07_INDEL_rEdge => 0,
                                 i08_INDEL_close => 0
                             } ],
-            # [ { R1_bam => $R1_bam,
-            #     R2_bam => $R2_bam,
+            # [ { R1_bam => $R1_bamOB,
+            #     R2_bam => $R2_bamOB,
             #     prefix => $bam_prefix,
-            #     splitBam => {tag1=>$splitBam1, tag2=>$splitBam2, ..},
-            #     splitBamFH => {tag1=>, tag2=> , ..},
+            #     no => $no,
             #     workSpace => $workspace_folder,
             #     PEsplit_report => $report_path,
-            #     bamToMerge => {h[x]Intra=>[], hInter=>[]},
-            #     mergeBam => {h[x]Intra=>$mergeBam1, hInter=>$mergeBam2}
+            #     splitBam => {tag1=>$splitBamOB, tag2=>$splitBamOB, ..},
+            #     bamToMerge => {h[x]Intra=>[$splitBamOB,..], hInter=>[$splitBamOB,..]},
+            #     mergeBam => {h[x]Intra=>$mergeBamOB, hInter=>$mergeBamOB}
             #   } ]
             ## tags: phMut-[ds]End-hx, phMut-[ds]End-hInter, discarded, unknown, invalid
             [ PairBamFiles => [] ],
@@ -248,8 +249,8 @@ sub Load_moduleVar_to_pubVarPool{
             [ peC_ReportUnit => 1E6 ],
             [ PEsplit_report => undef ],
             [ PEsplitStat => {
-                                'phMut-dEnd-h1' => 0,
-                                'phMut-sEnd-h1' => 0,
+                                # 'phMut-dEnd-h1' => 0, # see func 'prepare'
+                                # 'phMut-sEnd-h1' => 0,
                                 'phMut-dEnd-hInter' => 0,
                                 'phMut-sEnd-hInter' => 0,
                                 'discarded' => 0,
@@ -409,22 +410,22 @@ sub check_files{
     my %preBamFiles;
     for my $PairBamList (@{$V_Href->{PairBamList}}){
         if ($PairBamList =~ /^([^,]+R1[^,]*\.bam),([^,]+R2[^,]*\.bam)$/){
-            my ($R1_bam, $R2_bam) = ($1, $2);
-            if(    !file_exist(filePath=>$R1_bam)
-                || !file_exist(filePath=>$R2_bam)
+            my ($R1_bam_path, $R2_bam_path) = ($1, $2);
+            if(    !file_exist(filePath=>$R1_bam_path)
+                || !file_exist(filePath=>$R2_bam_path)
             ){
                 warn_and_exit "<ERROR>\tbam file does not existfrom input:\n"
                                     ."\t$PairBamList\n";
             }
-            if(    exists $preBamFiles{$R1_bam}
-                || exists $preBamFiles{$R2_bam}
+            if(    exists $preBamFiles{$R1_bam_path}
+                || exists $preBamFiles{$R2_bam_path}
             ){
                 warn_and_exit "<ERROR>\tencounter same bam file again from input:\n"
                                     ."\t$PairBamList\n";
             }
             # prepare output prefix
-            ( my $R1_bam_prefix = basename($R1_bam) ) =~ s/[\.\_]R1.*\.bam$//;
-            ( my $R2_bam_prefix = basename($R2_bam) ) =~ s/[\.\_]R2.*\.bam$//;
+            ( my $R1_bam_prefix = basename($R1_bam_path) ) =~ s/[\.\_]R1.*\.bam$//;
+            ( my $R2_bam_prefix = basename($R2_bam_path) ) =~ s/[\.\_]R2.*\.bam$//;
             if(    $R1_bam_prefix ne $R2_bam_prefix
                 || length($R1_bam_prefix) == 0
                 || exists $preBamFiles{$R1_bam_prefix}
@@ -432,9 +433,13 @@ sub check_files{
                 warn_and_exit "<ERROR>\trequires valid prefix of bam files from input:\n"
                                     ."\t$PairBamList\n";
             }
+            # bam object
+            my $R1_bam = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $R1_bam_path, tag => $R1_bam_prefix);
+            my $R2_bam = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $R2_bam_path, tag => $R2_bam_prefix);
             # records
-            push @{$V_Href->{PairBamFiles}}, { R1_bam=>$R1_bam, R2_bam=>$R2_bam, prefix=>$R1_bam_prefix };
-            $preBamFiles{$_} = 1 for ( $R1_bam, $R2_bam, $R1_bam_prefix );
+            my $i = scalar @{$V_Href->{PairBamFiles}};
+            push @{$V_Href->{PairBamFiles}}, {R1_bam => $R1_bam, R2_bam => $R2_bam, prefix => $R1_bam_prefix, no => $i};
+            $preBamFiles{$_} = 1 for ( $R1_bam_path, $R2_bam_path, $R1_bam_prefix );
         }
         else{
             warn_and_exit "<ERROR>\tcannot recognize R1/R2.bam files from input:\n"
@@ -484,9 +489,17 @@ sub prepare{
         }
     }
 
+    # prepare PEsplitStat (dEnd and sEnd) of step s01
+    for my $hap_i (1 .. $V_Href->{haploCount}){
+        $V_Href->{PEsplitStat}->{"phMut-dEnd-h$hap_i"} = 0;
+        $V_Href->{PEsplitStat}->{"phMut-sEnd-h$hap_i"} = 0;
+    }
+
     # inform selected bam
-    if(    $V_Href->{stepToStart} == 2
-        || $V_Href->{stepToStop}  == 3
+    if(    (   $V_Href->{stepToStart} == 2
+            || $V_Href->{stepToStop}  == 3
+           )
+        && scalar(keys %{$V_Href->{SelectBamPref}}) != 0
     ){
         stout_and_sterr "[INFO]\t".`date`
                              ."\tSelect bam files with below prefixes to operate.\n";
@@ -495,7 +508,7 @@ sub prepare{
 
     # delete possible previous results
     if( $V_Href->{stepToStart} <= 1 ){
-        `rm -rf $V_Href->{outdir}/*`;
+        # `rm -rf $V_Href->{outdir}/*`; # debug
     }
     else{
         if( $V_Href->{stepToStart} <= 2 ){

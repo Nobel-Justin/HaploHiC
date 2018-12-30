@@ -5,6 +5,7 @@ use warnings;
 use Getopt::Long;
 use File::Basename;
 use List::Util qw/ max min sum /;
+use Data::Dumper;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::Sys qw/ file_exist trible_run_for_success /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;

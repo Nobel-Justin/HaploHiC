@@ -22,7 +22,6 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 @ISA = qw(Exporter);
 @EXPORT = qw/
               phasePE_to_contactCount
-              smartBam_PEread
               load_phasedPE_contacts
               phasePE_contacts_to_count
               get_rOBpair_HapLinkCount
@@ -34,7 +33,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
 $VERSION = "0.08";
-$DATE = '2018-12-23';
+$DATE = '2018-12-29';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -43,7 +42,6 @@ $EMAIL = 'wenlongkxm@gmail.com';
 #--------- functions in this pm --------#
 my @functoion_list = qw/
                         phasePE_to_contactCount
-                        smartBam_PEread
                         load_phasedPE_contacts
                         mPosToWinIdx
                         phasePE_contacts_to_count
@@ -59,15 +57,11 @@ sub phasePE_to_contactCount{
     my $tagToBamHref = $parm{tagToBamHref};
 
     # load reads from each bam
-    for my $tag ( sort keys %$tagToBamHref ){
-        for my $Aref ( @{$tagToBamHref->{$tag}} ){
-            my ($bamPrefix, $hapSplitBam) = @$Aref;
+    for my $tag (sort keys %$tagToBamHref){
+        for my $hapSplitBam (@{$tagToBamHref->{$tag}}){
             # read phased bam
-            ## FLAG: 0x100(sd), 0x400(d), 0x800(sp)
-            ## WEDO: -F 0x400(d), as 'sd' and 'sp' alignments is important in HiC
-            &smartBam_PEread(bam => $hapSplitBam, mark => "'$bamPrefix' $tag", viewOpt => '-F 0x400',
-                             subrtRef => \&load_phasedPE_contacts,
-                             subrtParmAref => [idxFunc=>\&mPosToWinIdx]);
+            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&mPosToWinIdx]);
+            $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
         }
         # contacts to count
         ## here, do de-dup phased reads (optional)
@@ -75,62 +69,74 @@ sub phasePE_to_contactCount{
     }
 }
 
-#--- read smartPE BAM and do something on each pe_OB ---
-sub smartBam_PEread{
-    # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
-    my %parm = @_;
-    my $bam = $parm{bam};
-    my $mark = $parm{mark} || '';
-    my $viewOpt = $parm{viewOpt} || '';
-    my $subrtRef = $parm{subrtRef};
-    my $subrtParmAref = $parm{subrtParmAref} || [];
-    my $peOB_AbufferSize = $parm{peOB_AbufferSize} || 1E5;
+# #--- read smartPE BAM and do something on each pe_OB ---
+# sub smartBam_PEread{
+#     # options
+#     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+#     my %parm = @_;
+#     my $bam = $parm{bam};
+#     my $mark = $parm{mark} || $bam->get_tag;
+#     my $viewOpt = $parm{viewOpt} || '';
+#     my $subrtRef = $parm{subrtRef};
+#     my $subrtParmAref = $parm{subrtParmAref} || [];
+#     my $peOB_AbufferSize = $parm{peOB_AbufferSize} || 1E5;
+#     my $deal_peOB_pool = $parm{deal_peOB_pool} || 0;
+#     my $quiet = $parm{quiet} || 0; # not inform PE Count
+#     my $simpleLoad = $parm{simpleLoad} || 0; # just record reads' basic information
 
-    # check existence
-    warn_and_exit "<ERROR>\tCannot find $mark bam: $bam\n" unless file_exist(filePath => $bam);
-    # read bam
-    open (BAM,"$V_Href->{samtools} view $viewOpt $bam |") || die "fail read $mark bam: $!\n";
-    my $pe_Count = 0;
-    my $pe_CountInform = $V_Href->{peC_ReportUnit};
-    my $last_pid = '';
-    my $last_peOB = undef;
-    my @peOB_pool = ();
-    while(<BAM>){
-        my $reads_OB = BioFuse::BioInfo::Objects::HicReads_OB->new( ReadsLineText => $_, _rc_optfd => 1, _rc_rdstr => 1 );
-        if( $reads_OB->get_pid ne $last_pid ){
-            # deal last pe_OB
-            $pe_Count++;
-            push @peOB_pool, $last_peOB if( defined $last_peOB );
-            if( $pe_Count % $peOB_AbufferSize == 0 ){
-                &{$subrtRef}(pe_OB => $_, @$subrtParmAref) for @peOB_pool;
-                @peOB_pool = ();
-                # inform
-                if($pe_Count >= $pe_CountInform){
-                    stout_and_sterr "[INFO]\t".`date`
-                                         ."\tload $pe_CountInform PE-reads from $mark bam.\n";
-                    $pe_CountInform += $V_Href->{peC_ReportUnit};
-                }
-            }
-            # create new pe_OB
-            $last_peOB = BioFuse::BioInfo::Objects::HicPairEnd_OB->new;
-            # update
-            $last_pid = $reads_OB->get_pid;
-        }
-        # load this reads_OB to pe_OB
-        $last_peOB->load_reads_OB(reads_OB => $reads_OB);
-    }
-    close BAM;
-    # deal the last one
-    if( defined $last_peOB ){
-        push @peOB_pool, $last_peOB;
-        &{$subrtRef}(pe_OB => $_, @$subrtParmAref) for @peOB_pool;
-        @peOB_pool = ();
-    }
-    # inform
-    stout_and_sterr "[INFO]\t".`date`
-                         ."\tTotally, load $pe_Count PE-reads from $mark bam.\n";
-}
+#     my $pe_Count = 0;
+#     my $pe_CountInform = $V_Href->{peC_ReportUnit};
+#     my $last_pid = '';
+#     my $last_peOB = undef;
+#     my @peOB_pool = ();
+#     my $fh = $bam->start_read(samtools => $V_Href->{samtools}, viewOpt => $viewOpt);
+#     while(<$fh>){
+#         my $reads_OB = BioFuse::BioInfo::Objects::HicReads_OB->new( ReadsLineText => $_, _rc_optfd => 1, _rc_rdstr => 1, simpleLoad => $simpleLoad );
+#         if( $reads_OB->get_pid ne $last_pid ){
+#             # deal last pe_OB
+#             $pe_Count++;
+#             push @peOB_pool, $last_peOB if( defined $last_peOB );
+#             if( $pe_Count % $peOB_AbufferSize == 0 ){
+#                 if($deal_peOB_pool){
+#                     &{$subrtRef}(pe_OB_poolAf => \@peOB_pool, @$subrtParmAref);
+#                 }
+#                 else{
+#                     &{$subrtRef}(pe_OB => $_, @$subrtParmAref) for @peOB_pool;
+#                 }
+#                 # sweep
+#                 @peOB_pool = ();
+#                 # inform
+#                 if($pe_Count >= $pe_CountInform){
+#                     stout_and_sterr "[INFO]\t".`date`
+#                                          ."\tload $pe_CountInform PE-reads from $mark bam.\n" unless $quiet;
+#                     $pe_CountInform += $V_Href->{peC_ReportUnit};
+#                 }
+#             }
+#             # create new pe_OB
+#             $last_peOB = BioFuse::BioInfo::Objects::HicPairEnd_OB->new;
+#             # update
+#             $last_pid = $reads_OB->get_pid;
+#         }
+#         # load this reads_OB to pe_OB
+#         $last_peOB->load_reads_OB(reads_OB => $reads_OB);
+#     }
+#     close $fh;
+#     # deal the last one
+#     if( defined $last_peOB ){
+#         push @peOB_pool, $last_peOB;
+#         if($deal_peOB_pool){
+#             &{$subrtRef}(pe_OB_poolAf => \@peOB_pool, @$subrtParmAref);
+#         }
+#         else{
+#             &{$subrtRef}(pe_OB => $_, @$subrtParmAref) for @peOB_pool;
+#         }
+#         # sweep
+#         @peOB_pool = ();
+#     }
+#     # inform
+#     stout_and_sterr "[INFO]\t".`date`
+#                          ."\tTotally, load $pe_Count PE-reads from $mark bam.\n" unless $quiet;
+# }
 
 #--- load contacts of phased PE-reads ---
 sub load_phasedPE_contacts{
@@ -142,9 +148,7 @@ sub load_phasedPE_contacts{
     # my $hapSort = $parm{hapSort} || 0; # currently, deprecated
 
     # get chr-pos ascending sorted all mapped reads_OB
-    my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(rEndAref => [1,2], onlyMap => 1,
-                                                   chrSortHref => $V_Href->{ChrThings},
-                                                   chrSortKey  => 'turn');
+    my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
     # recover SuppHaplo attribute
     $_->recover_SuppHaploAttr for @$rOB_sortAref;
     # extract haplotype confirmed alignments
@@ -168,6 +172,13 @@ sub load_phasedPE_contacts{
     $pIdx{b}  = &{$idxFunc}(chr => $chr{b}, pos => $hasHaprOB[-1]->get_mpos);
     $hapID{a} = $hasHaprOB[ 0]->get_SuppHaploStr;
     $hapID{b} = $hasHaprOB[-1]->get_SuppHaploStr;
+    # hapID might have multiple haplotype, then make them really inter-haplotype
+    if($hapID{a} =~ /,/ || $hapID{b} =~ /,/){
+        ## i=initiative; p=passive
+        my ($i,$p) = $hapID{b} =~ /,/ ? qw/ a b / : qw/ b a /;
+        $hapID{$i} =~ s/,.+//; # arbitrary, greedy
+        $hapID{$p} =  first {$_ ne $hapID{$i}} split /,/, $hapID{$p};
+    }
     # hapID sort
     my ($k1,$k2) = qw/ a b /;
     # ($k1,$k2) = sort {$hapID{$a} cmp $hapID{$b}} ($k1,$k2) if ($hapSort && $hapID{a} ne $hapID{b}); # deprecated
@@ -230,6 +241,7 @@ sub get_rOBpair_HapLinkCount{
     my %parm = @_;
     my $skipSort = $parm{skipSort} || 0;
     my $hapRegex = $parm{hapRegex} || undef;
+    my $HapLinkHf = $parm{HapLinkHf};
 
     my %HapLinkCount;
     # chr,pos ascending sort
@@ -249,13 +261,30 @@ sub get_rOBpair_HapLinkCount{
     }
     # get region pair
     my %mSeg = map { ($_, $rOB{$_}->get_mseg) } keys %rOB;
-    my %mPos = map { ($_, $rOB{$_}->get_mpos) } keys %rOB;
-    my %mExp = map { ($_, $mPos{$_}+$rOB{$_}->get_mRefLen-1) } keys %rOB;
-    # first check
+    # first check chr-pair
     if(    ! exists $V_Href->{phasePEcontact}->{$mSeg{a}}
         || ! exists $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}}
     ){
+        $HapLinkHf->{stat}->{LackChrLink} ++;
         return (\%HapLinkCount, "LackChrLink($mSeg{a},$mSeg{b})");
+    }
+    # then, pos-pair
+    my %mPos = map { ($_, $rOB{$_}->get_mpos) } keys %rOB;
+    my %mExp = map { ($_, $mPos{$_}+$rOB{$_}->get_mRefLen-1) } keys %rOB;
+    # try quick find from HapLinkC_pool
+    my $winIdx_a = Pos2Idx(pos => $mPos{a}, winSize => $V_Href->{UKreadsFlankRegUnit});
+    my $winIdx_b = Pos2Idx(pos => $mPos{b}, winSize => $V_Href->{UKreadsFlankRegUnit});
+    my $winTag_a = "$mSeg{a},w$winIdx_a";
+    my $winTag_b = "$mSeg{b},w$winIdx_b";
+    if(exists $HapLinkHf->{link}->{$winTag_a}){
+        if(exists $HapLinkHf->{link}->{$winTag_a}->{$winTag_b}){
+            # stout_and_sterr "quick find HapLink for $winTag_a,$mPos{a}-$mExp{a} $winTag_b,$mPos{b}-$mExp{b}\n"; # debug
+            $HapLinkHf->{stat}->{QuickFind} ++;
+            return @{ $HapLinkHf->{link}->{$winTag_a}->{$winTag_b} };
+        }
+    }
+    else{ # not find, must be next a-side bin-Idx
+        %{$HapLinkHf->{link}} = ();
     }
     # iteratively find sufficient phased Het-Mut in local flank region
     my $chrHapLinkHref = $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}};
@@ -317,6 +346,9 @@ sub get_rOBpair_HapLinkCount{
                     .",MCT5p:$fReg{$_}{mct}{p5}"
                     .",MCT3p:$fReg{$_}{mct}{p3})"
                     for sort keys %fReg;
+            # record and return
+            $HapLinkHf->{link}->{$winTag_a}->{$winTag_b} = [\%HapLinkCount, $mark];
+            $HapLinkHf->{stat}->{Calculate} ++;
             return (\%HapLinkCount, $mark);
         }
     }

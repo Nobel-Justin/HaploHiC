@@ -10,7 +10,7 @@ use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
-use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount smartBam_PEread get_rOBpair_HapLinkCount /;
+use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount get_rOBpair_HapLinkCount /;
 
 require Exporter;
 
@@ -21,8 +21,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 @EXPORT = qw/
               sEndhx_get_HapLink
               getTODOpairBamHrefArray
-              prepare_getHapBamName
-              prepare_getHapBamFH
+              prepareGetHapBamObj
+              startWriteGetHapBam
             /;
 @EXPORT_OK = qw();
 %EXPORT_TAGS = ( DEFAULT => [qw()],
@@ -31,7 +31,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
 $VERSION = "0.05";
-$DATE = '2018-12-22';
+$DATE = '2018-12-29';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -42,8 +42,8 @@ my @functoion_list = qw/
                         sEndhx_get_HapLink
                         getTODOpairBamHrefArray
                         confirm_sEndSoloHapPE_HapLink
-                        prepare_getHapBamName
-                        prepare_getHapBamFH
+                        prepareGetHapBamObj
+                        startWriteGetHapBam
                         assign_sEndUKend_haplotype
                         findContactAnchor
                      /;
@@ -59,22 +59,14 @@ sub sEndhx_get_HapLink{
         my @tags = map {("phMut-dEnd-h$_")} ( 1 .. $V_Href->{haploCount} ); # t1, but not t3("phMut-sEnd-h$_")
         push @tags, "phMut-dEnd-hInter", "phMut-sEnd-hInter"; # t2,t4
         for my $tag ( @tags ){
-            push @{$tagToBamHref->{$tag}}, [ $_->{prefix}, $_->{splitBam}->{$tag} ] for @{$V_Href->{PairBamFiles}};
+            push @{$tagToBamHref->{$tag}}, $_->{splitBam}->{$tag} for @{$V_Href->{PairBamFiles}};
         }
-        phasePE_to_contactCount( tagToBamHref => $tagToBamHref );
+        phasePE_to_contactCount(tagToBamHref => $tagToBamHref);
     }
 
     # assign haplo to 'UK' end in sEnd-h[x] PE
-    ## write getHap.bam
+    ## write getHapBam
     &confirm_sEndSoloHapPE_HapLink;
-}
-
-#--- return Href-array of all bams or selected ---
-sub getTODOpairBamHrefArray{
-    # all bams or selected
-    return   scalar(keys %{$V_Href->{SelectBamPref}}) == 0
-           ? @{$V_Href->{PairBamFiles}}
-           : grep exists $V_Href->{SelectBamPref}->{$_->{prefix}}, @{$V_Href->{PairBamFiles}};
 }
 
 #--- confirm sEnd-h[x] PE haplotype contact ---
@@ -82,10 +74,10 @@ sub getTODOpairBamHrefArray{
 ## here, deal with all phMut-sEnd-h[x],
 ## as they will be reload to fill the phased-PE-contact for next dEnd-unknown PE hapAssign
 sub confirm_sEndSoloHapPE_HapLink{
-    # prepare getHap.bam name of all source bams
+    # prepare getHapBam name of all source bams
     for my $hapIdx (1 .. $V_Href->{haploCount}){
         my $tag = "phMut-sEnd-h$hapIdx";
-        &prepare_getHapBamName(pairBamHref => $_, tag => $tag, hapID => "h$hapIdx", splitBam => $_->{splitBam}->{$tag}) for @{$V_Href->{PairBamFiles}};
+        &prepareGetHapBamObj(pairBamHref => $_, tag => $tag, hapID => "h$hapIdx") for @{$V_Href->{PairBamFiles}};
     }
 
     # start from step after current step
@@ -97,111 +89,117 @@ sub confirm_sEndSoloHapPE_HapLink{
     my $pm;
     my $forkNum = min( $V_Href->{forkNum}, scalar(@TODOpairBamHref) );
     my $fork_DO = ( $forkNum > 1 );
-    if( $fork_DO ){ $pm = new Parallel::ForkManager($forkNum) }
+    if($fork_DO){ $pm = new Parallel::ForkManager($forkNum) }
     # load PE from sEnd-h[x].bam
     for my $pairBamHref ( @TODOpairBamHref ){
         # fork job starts
-        if( $fork_DO ){ $pm->start and next; }
-        # load reads from each bam
-        my $bamPrefix = $pairBamHref->{prefix};
+        if($fork_DO){ $pm->start and next }
+        # load reads from each hapSplit.bam
         for my $hapIdx (1 .. $V_Href->{haploCount}){
             my $tag = "phMut-sEnd-h$hapIdx";
-            my $mark = "'$bamPrefix' $tag";
+            # prepare PEsplitStat
+            for my $chrTag (qw/ IntraChr InterChr /){
+                for my $assignMethod (qw/ ph rd /){
+                    $V_Href->{PEsplitStat}->{"$tag.hInter.$chrTag.$assignMethod"} = 0;
+                    $V_Href->{PEsplitStat}->{"$tag.h${hapIdx}Intra.$chrTag.$assignMethod"} = 0;
+                }
+            }
+            # prepare getHapBam and file-handle
+            &startWriteGetHapBam(pairBamHref => $pairBamHref, tag => $tag);
+            # read hapSplit.bam
             my $hapSplitBam = $pairBamHref->{splitBam}->{$tag};
-            # check existence
-            warn_and_exit "<ERROR>\tCannot find $tag bam: $hapSplitBam\n" unless file_exist(filePath => $hapSplitBam);
-            # prepare getHap.bam and file-handle
-            &prepare_getHapBamFH(pairBamHref => $pairBamHref, tag => $tag, splitBam => $hapSplitBam);
-            # read hapSplit.BAM
-            ## FLAG: 0x100(sd), 0x400(d), 0x800(sp)
-            ## WEDO: -F 0x400(d), as 'sd' and 'sp' alignments is important in HiC
-            smartBam_PEread(bam => $hapSplitBam, mark => $mark, viewOpt => '-F 0x400',
-                            subrtRef => \&assign_sEndUKend_haplotype,
-                            subrtParmAref => [tag=>$tag, pairBamHref => $pairBamHref]);
-            # close getHap.bam file-handle
-            close $_ for values %{$pairBamHref->{splitBamFH}};
-            $pairBamHref->{splitBamFH} = {}; # empty splitBamFH key
+            my $HapLinkHf = { link => {}, stat => {Calculate=>0, LackChrLink=>0, QuickFind=>0} };
+            my @subrtOpt = (subrtRef => \&assign_sEndUKend_haplotype,
+                            subrtParmAref => [tag => $tag, pairBamHref => $pairBamHref, HapLinkHf => $HapLinkHf]);
+            $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
+            # close getHapBam file-handle
+            $_->stop_write for values %{$pairBamHref->{splitBam}};
             # inform
+            my $mark = $hapSplitBam->get_tag;
+            my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});
             stout_and_sterr "[INFO]\t".`date`
-                                 ."\tassign haplotype to UK-end of PE-reads from $mark bam OK.\n";
+                                 ."\tassign haplotype to UK-end of PE-reads from $mark bam OK.\n"
+                                 ."\tHapLinkStat: $HapLinkStat\n";
         }
         # write report (2nd part)
         ## previous contents
         my @Content = split /\s+/, `cat $pairBamHref->{PEsplit_report}`;
         my %Content = map {(@Content[$_,$_+1])} grep {$_%2==0 && $Content[$_] !~ /\.[rp][dh]:$/} (0 .. $#Content);
         ## add contents of this step
-        open (PESRT, Try_GZ_Write($pairBamHref->{PEsplit_report})) || die "fail write '$bamPrefix' report: $!\n";
+        open (PESRT, Try_GZ_Write($pairBamHref->{PEsplit_report})) || die "fail write '$pairBamHref->{prefix}' report: $!\n";
         print PESRT "$Content[$_]\t$Content{$Content[$_]}\n" for grep {$_%2==0 && exists $Content{$Content[$_]}} (0 .. $#Content);
         print PESRT "$_:\t$V_Href->{PEsplitStat}->{$_}\n" for grep {!exists $Content{"$_:"}} sort keys %{$V_Href->{PEsplitStat}};
         close PESRT;
         # fork job finishes
-        if( $fork_DO ){ $pm->finish; }
+        if($fork_DO){ $pm->finish }
     }
     # collect fork jobs
-    if( $fork_DO ){ $pm->wait_all_children; }
+    if($fork_DO){ $pm->wait_all_children }
 
     # stop at current step
     exit(0) if $V_Href->{stepToStop} == 2;
 }
 
-#--- prepare getHap.bam from hapSplit.bam ---
-## tag and name
-sub prepare_getHapBamName{
+#--- prepare getHapBam object from hapSplit.bam ---
+sub prepareGetHapBamObj{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $pairBamHref = $parm{pairBamHref};
     my $tag = $parm{tag};
     my $hapID = $parm{hapID};
-    my $splitBam = $parm{splitBam};
 
+    my $splitBamPath = $pairBamHref->{splitBam}->{$tag}->get_filepath;
+    my $splitBamTag = $pairBamHref->{splitBam}->{$tag}->get_tag;
     # possible haplo combination
     my @hapComb = $hapID ? ("${hapID}Intra") : (map {("h${_}Intra")} (1 .. $V_Href->{haploCount}));
     push @hapComb, 'hInter';
-    # getHap.bam tag, name and file-handle
     for my $hapComb (@hapComb){
-        # set tag and name
+        # getHapBam object with filepath and tag
         my $getHapTag = "$tag.$hapComb";
-        (my $getHapBam = $splitBam) =~ s/$tag/$getHapTag/;
-        $pairBamHref->{splitBam}->{$getHapTag} = $getHapBam;
-        # prepare bam to final merge
-        push @{$pairBamHref->{bamToMerge}->{"merge.$hapComb"}}, $getHapBam;
+        (my $getHapBamPath = $splitBamPath) =~ s/$tag/$getHapTag/;
+        (my $getHapBamTag  = $splitBamTag)  =~ s/$tag/$getHapTag/;
+        $pairBamHref->{splitBam}->{$getHapTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $getHapBamPath, tag => $getHapBamTag);
+        # prepare bam for final merge
+        push @{$pairBamHref->{bamToMerge}->{"merge.$hapComb"}}, $pairBamHref->{splitBam}->{$getHapTag};
     }
 }
 
-#--- prepare getHap.bam from hapSplit.bam ---
-## file-handle and SAM-header
-sub prepare_getHapBamFH{
+#--- return Href-array of all bams or selected ---
+sub getTODOpairBamHrefArray{
+    # all bams or selected
+    return   scalar(keys %{$V_Href->{SelectBamPref}}) == 0
+           ? @{$V_Href->{PairBamFiles}}
+           : grep exists $V_Href->{SelectBamPref}->{$_->{prefix}}, @{$V_Href->{PairBamFiles}};
+}
+
+#--- start writing getHapBam (file-w-handle, SAM-header) ---
+sub startWriteGetHapBam{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $pairBamHref = $parm{pairBamHref};
     my $tag = $parm{tag};
-    my $splitBam = $parm{splitBam};
+
+    # prepare SAM-header
+    my $hapSplitBam = $pairBamHref->{splitBam}->{$tag};
+    my $HeadAf = $hapSplitBam->get_SAMheader(samtools => $V_Href->{samtools});
+    ## add options of second part in @PG line
+    my $PGi = first {$HeadAf->[$_] =~ /\@PG/} (0 .. scalar(@$HeadAf)-1);
+    chomp($HeadAf->[$PGi]);
+    $HeadAf->[$PGi] .= " -ucrfut $V_Href->{UKreadsFlankRegUnit}";
+    $HeadAf->[$PGi] .= " -ucrpha $V_Href->{UKreadsMaxPhasedHetMut}\n";
+    my $HeadStr = join('', @$HeadAf);
 
     # getHap.bam file-handle
     my @ToInform;
     for my $getHapTag (grep /^$tag\./, sort keys %{$pairBamHref->{splitBam}}){
         my $getHapBam = $pairBamHref->{splitBam}->{$getHapTag};
-        # file-handle
-        open ($pairBamHref->{splitBamFH}->{$getHapTag}, "| $V_Href->{samtools} view -b -o $getHapBam") || die "fail write getHapBam: $!\n";
-        push @ToInform, $getHapBam;
+        $getHapBam->start_write(samtools => $V_Href->{samtools});
+        $getHapBam->write(content => $HeadStr);
+        push @ToInform, $getHapBam->get_filepath;
     }
-    # SAM header
-    open (SPLBAM,"$V_Href->{samtools} view -H $splitBam |") || die"fail read splitBam: $!\n";
-    while( my $Hline = <SPLBAM> ){
-        if( $Hline !~ /\@PG/ ){
-            print {$_} $Hline for values %{$pairBamHref->{splitBamFH}};
-        }
-        else{ # add options of second part
-            chomp($Hline);
-            $Hline .= " -ucrfut $V_Href->{UKreadsFlankRegUnit}";
-            $Hline .= " -ucrftm $V_Href->{UKreadsFlankRegUnitMaxTimes}";
-            $Hline .= " -ucrpha $V_Href->{UKreadsMaxPhasedHetMut}";
-            print {$_} "$Hline\n" for values %{$pairBamHref->{splitBamFH}};
-        }
-    }
-    close SPLBAM;
+
     # inform
     stout_and_sterr "[INFO]\t".`date`
                          ."\tgetHap bam files are well prepared.\n"
@@ -214,13 +212,12 @@ sub assign_sEndUKend_haplotype{
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $pe_OB = $parm{pe_OB};
-    my $pairBamHref = $parm{pairBamHref};
     my $tag = $parm{tag};
+    my $pairBamHref = $parm{pairBamHref};
+    my $HapLinkHf = $parm{HapLinkHf};
 
     # get chr-pos ascending sorted all mapped reads_OB
-    my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(rEndAref => [1,2], onlyMap => 1,
-                                                   chrSortHref => $V_Href->{ChrThings},
-                                                   chrSortKey  => 'turn');
+    my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
     # recover SuppHaplo attribute
     $_->recover_SuppHaploAttr for @$rOB_sortAref;
     # get index of hasHap and nonHap reads_OB
@@ -231,7 +228,7 @@ sub assign_sEndUKend_haplotype{
     # get haplo link count of paired rOB, <needs to sort again>
     ## only keep pre-set hapID combination
     my $regex = $hasHapIdx < $nonHapIdx ? "^$hasHapID," : ",$hasHapID\$";
-    my ($HapLinkC_Href, $mark) = get_rOBpair_HapLinkCount(rOB_a => $hasHap_rOB, rOB_b => $nonHap_rOB, hapRegex => $regex);
+    my ($HapLinkC_Href, $mark) = get_rOBpair_HapLinkCount(rOB_a => $hasHap_rOB, rOB_b => $nonHap_rOB, hapRegex => $regex, HapLinkHf => $HapLinkHf);
     # assign HapID to nonHap_rOB
     ## once local region is not phased, reset mark and loads pre-defined HapLink
     my $assignMethod;
@@ -280,9 +277,9 @@ sub assign_sEndUKend_haplotype{
     $nonHap_rOB->load_SuppHaplo(hapID => $assHapID, allele_OB => 'NULL');
     $nonHap_rOB->addHapIDtoOptfd; # update
     $nonHap_rOB->add_str_to_optfd(str => "\tXU:Z:$mark");
-    # write PE to getHap.bam files
+    # write PE to getHapBam files
     my $getHapTag = $assHapID eq $hasHapID ? "$tag.${assHapID}Intra" : "$tag.hInter";
-    print {$pairBamHref->{splitBamFH}->{$getHapTag}} "$_\n" for @{$pe_OB->printSAM};
+    $pairBamHref->{splitBam}->{$getHapTag}->write(content => join("\n",@{$pe_OB->printSAM})."\n");
     # stat
     my $chrTag = $isIntraChr ? 'IntraChr' : 'InterChr';
     $V_Href->{PEsplitStat}->{"$getHapTag.$chrTag.$assignMethod"} ++;
