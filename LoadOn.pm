@@ -19,8 +19,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::LoadOn';
 #----- version --------
-$VERSION = "0.50";
-$DATE = '2018-11-01';
+$VERSION = "0.51";
+$DATE = '2018-12-30';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -35,7 +35,7 @@ our $V_Href = {
 
     MainName => 'HaploHiC.pl',
     Version => '0.14',
-    Date => '2018-11-14',
+    Date => '2018-12-26',
     AUTHOR => 'Wenlong Jia',
     EMAIL => 'wenlongkxm@gmail.com',
 
@@ -98,6 +98,8 @@ our $V_Href = {
     ## for dump (JuicerDumpBP and JuicerDumpFRAG)
     ### ChrThings -> { $chr => { chr => $chr, len => $length, turn => $. } }
     ChrThings => {},
+    ### sortedChr -> [ $chr_a, $chr_b, .. ]
+    sortedChr => [],
 
     #++++++++++#
     # software #
