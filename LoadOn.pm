@@ -19,8 +19,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::LoadOn';
 #----- version --------
-$VERSION = "0.51";
-$DATE = '2018-12-30';
+$VERSION = "0.50";
+$DATE = '2018-11-01';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -34,8 +34,8 @@ our $V_Href = {
     #++++++++++++++#
 
     MainName => 'HaploHiC.pl',
-    Version => '0.14',
-    Date => '2018-12-26',
+    Version => '0.15',
+    Date => '2018-12-30',
     AUTHOR => 'Wenlong Jia',
     EMAIL => 'wenlongkxm@gmail.com',
 
