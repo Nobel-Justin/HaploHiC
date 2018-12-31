@@ -246,6 +246,7 @@ sub Load_moduleVar_to_pubVarPool{
             ## tags: phMut-[ds]End-hx, phMut-[ds]End-hInter, discarded, unknown, invalid
             [ PairBamFiles => [] ],
             [ rOB_AbufferSize => 1E5 ], # 5E5
+            [ chrPairSort_peOB_AbufferSize => 2E6 ], # 5E6
             [ peC_ReportUnit => 1E6 ],
             [ PEsplit_report => undef ],
             [ PEsplitStat => {

@@ -861,6 +861,7 @@ sub chrPairBamToSortSplitBam{
     $splitBam->start_write(samtools => $V_Href->{samtools});
     $splitBam->write(content => $_) for @$SAMheadAf;
     # sort each chrPair bam and write to new split bam
+    my $AbufferSize = $V_Href->{chrPairSort_peOB_AbufferSize};
     my $chrCount = scalar @{$V_Href->{sortedChr}};
     for my $i (0 .. $chrCount-1){
         my $chr_a = $V_Href->{sortedChr}->[$i];
@@ -871,7 +872,7 @@ sub chrPairBamToSortSplitBam{
             my @subrtOpt = (subrtRef => \&write_sort_peOB_to_newSplitBam, subrtParmAref => [splitBam => $splitBam]);
             $chrPairBamHf->{$chrPairTag}->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC',
                                                           mark => "$mark $chrPairTag", quiet => 1, simpleLoad => 1,
-                                                          peOB_AbufferSize => 5E6, deal_peOB_pool => 1, @subrtOpt);
+                                                          peOB_AbufferSize => $AbufferSize, deal_peOB_pool => 1, @subrtOpt);
         }
     }
     # close new split bam
