@@ -353,7 +353,7 @@ sub PEreads_to_splitBam{
     ## output
     $pairBamHref->{splitBam}->{$SplitBam_tag}->write(content => join("\n",@$peSAM_Aref)."\n");
     ## stat
-    $SplitBam_tag = $Split_marker if $SplitBam_tag eq /invalid/;
+    $SplitBam_tag = $Split_marker if $SplitBam_tag eq 'invalid';
     $V_Href->{PEsplitStat}->{$SplitBam_tag} ++;
 }
 
@@ -599,7 +599,7 @@ sub judge_on_PE{
                                            skipCloseAlign  => $V_Href->{skipCloseAlignFromInvalid});
     if($ivdPEjudge){
         $SplitBam_tag = 'invalid';
-        $Split_marker = "invalidPE-$ivdPEjudge";
+        $Split_marker = "invalid-$ivdPEjudge";
     }
     ## t1-t4, matches one or more haplotype(s)
     elsif(   $rEndJdgHref->{1}->{J} =~ /h\d+/
