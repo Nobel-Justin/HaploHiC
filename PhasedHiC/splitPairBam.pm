@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.17";
-$DATE = '2018-12-29';
+$VERSION = "0.18";
+$DATE = '2018-12-31';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -42,10 +42,11 @@ $EMAIL = 'wenlongkxm@gmail.com';
 #--------- functions in this pm --------#
 my @functoion_list = qw/
                         divide_pairBam
+                        prepareSplitBamObj
+                        sourceToSplitBam
+                        startWriteSplitBam
                         loadrOBfromSourceBam
                         rOB_to_peOB
-                        prepareSplitBamObj
-                        startWriteSplitBam
                         PEreads_to_splitBam
                         judge_on_rEnd
                         judge_reads_alignment
@@ -80,8 +81,8 @@ sub divide_pairBam{
         # fork job starts
         if($fork_DO){ $pm->start and next }
         # distribute Hi-C PE-reads from source pairBam to different splitBam
-        # &SourceToSplitBam(pairBamHref => $pairBamHref); # debug
-        # sort split.bam, sEnd and unknown
+        &sourceToSplitBam(pairBamHref => $pairBamHref);
+        # sort splitBam, sEnd and unknown
         ## use fork_DO to determine how to release memory
         &sortSplitBamByPEcontact(pairBamHref => $pairBamHref, fork_DO => $fork_DO);
         # fork job finishes
@@ -144,7 +145,7 @@ sub prepareSplitBamObj{
 }
 
 #--- distribute reads to splitBam from source pairBam ---
-sub SourceToSplitBam{
+sub sourceToSplitBam{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
@@ -320,15 +321,15 @@ sub PEreads_to_splitBam{
 
     # make judgement on each reads-end
     my %hap2phMut;
-    &judge_on_rEnd( pe_OB => $pe_OB, hap2phMutHref => \%hap2phMut );
+    &judge_on_rEnd(pe_OB => $pe_OB, hap2phMutHref => \%hap2phMut);
 
     # judge PE-reads
     my %Match_haplo;
-    my ($SplitBam_tag, $Split_marker) = &judge_on_PE( pe_OB => $pe_OB, MatchHap_Href => \%Match_haplo );
+    my ($SplitBam_tag, $Split_marker) = &judge_on_PE(pe_OB => $pe_OB, MatchHap_Href => \%Match_haplo);
 
     # add OWN 'XH:Z:' haplo-id to 'optfd' of each reads_OB
     if( $SplitBam_tag =~ /^phMut-/ ){
-        $pe_OB->addHapIDtoReadsOptfd( reads_end => $_ ) for (1,2);
+        $pe_OB->addHapIDtoReadsOptfd(reads_end => $_) for (1,2);
     }
     # write PE to split-bam files
     my $peSAM_Aref = $pe_OB->printSAM;
@@ -342,7 +343,7 @@ sub PEreads_to_splitBam{
             for my $phMutNO (sort {$a<=>$b} keys %{$hap2phMut{$hapID}}){
                 my $phMut_OB = $hap2phMut{$hapID}->{$phMutNO};
                 # phasedMut info
-                push @hapInfo, join(',', $phMut_OB->get_chr, $phMut_OB->get_pos, @{$phMut_OB->get_hapInfo(haplo_ID=>$hapID)} );
+                push @hapInfo, join(',', $phMut_OB->get_chr, $phMut_OB->get_pos, @{$phMut_OB->get_hapInfo(haplo_ID=>$hapID)});
             }
             push @all_hapInfo, "$hapID(".join(';',@hapInfo).")";
         }
@@ -352,6 +353,7 @@ sub PEreads_to_splitBam{
     ## output
     $pairBamHref->{splitBam}->{$SplitBam_tag}->write(content => join("\n",@$peSAM_Aref)."\n");
     ## stat
+    $SplitBam_tag = $Split_marker if $SplitBam_tag eq /invalid/;
     $V_Href->{PEsplitStat}->{$SplitBam_tag} ++;
 }
 
@@ -592,12 +594,12 @@ sub judge_on_PE{
     # t7, t1-t4, t6 #
     #---------------#
     ## t7, invalid Hi-C PE
-    if( $pe_OB->isInValidPair(chr2enzymePosHf => $V_Href->{chr2enzymePos},
-                              maxCloseAlignDist => $V_Href->{maxCloseAlignDist},
-                              skipCloseAlign  => $V_Href->{skipCloseAlignFromInvalid})
-    ){
+    my $ivdPEjudge = $pe_OB->isInValidPair(chr2enzymePosHf => $V_Href->{chr2enzymePos},
+                                           maxCloseAlignDist => $V_Href->{maxCloseAlignDist},
+                                           skipCloseAlign  => $V_Href->{skipCloseAlignFromInvalid});
+    if($ivdPEjudge){
         $SplitBam_tag = 'invalid';
-        $Split_marker = 'invalidPE';
+        $Split_marker = "invalidPE-$ivdPEjudge";
     }
     ## t1-t4, matches one or more haplotype(s)
     elsif(   $rEndJdgHref->{1}->{J} =~ /h\d+/

@@ -257,7 +257,10 @@ sub Load_moduleVar_to_pubVarPool{
                                 'discarded' => 0,
                                 'remove_SP' => 0,
                                 'unknown' => 0,
-                                'invalid' => 0
+                                'invalid-DanglingEnd' => 0,
+                                'invalid-SelfCircle' => 0,
+                                'invalid-DumpedPairFw' => 0,
+                                'invalid-DumpedPairRv' => 0
                             } ],
             # {$chr}->{$PosIdx} = [ $PhasedMut_OB_1, $PhasedMut_OB_1, .. ]
             # check BioFuse::BioInfo::Objects::PhasedMut_OB
@@ -509,7 +512,7 @@ sub prepare{
 
     # delete possible previous results
     if( $V_Href->{stepToStart} <= 1 ){
-        # `rm -rf $V_Href->{outdir}/*`; # debug
+        `rm -rf $V_Href->{outdir}/*`;
     }
     else{
         if( $V_Href->{stepToStart} <= 2 ){
