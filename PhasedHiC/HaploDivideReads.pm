@@ -34,7 +34,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
 $VERSION = "0.15";
-$DATE = '2018-12-30';
+$DATE = '2019-01-04';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -203,7 +203,8 @@ sub Load_moduleVar_to_pubVarPool{
             [ phasePEdetails => {} ], # record PE-map info and for de-dup
             [ phasePEcontact => {} ], # just record counts from 'phasePEdetails' hash
             [ UKreadsFlankRegUnit => 1E4 ],
-            [ UKreadsFlankRegUnitMaxTimes => 10 ], # 2**time
+            [ UKreadsFlankRegUnitMaxTimes => 10 ],
+            [ UKreadsFlankRegUnitTimesAf => [] ],
             [ UKreadsMaxPhasedHetMut => 5 ],
             [ SkipDeDupPhasedReads => 0 ],
             ## dump contacts
@@ -314,7 +315,7 @@ sub Get_Cmd_Options{
         "-qual:i"   => \$V_Href->{baseQ_offset},
         ## unknown reads operation
         "-ucrfut:s" => \$V_Href->{UKreadsFlankRegUnit},
-        # "-ucrftm:i" => \$V_Href->{UKreadsFlankRegUnitMaxTimes},
+        "-ucrftm:i" => \$V_Href->{UKreadsFlankRegUnitMaxTimes}, # hidden option
         "-ucrpha:i" => \$V_Href->{UKreadsMaxPhasedHetMut},
         "-mpwr:f"   => \$V_Href->{mapPosWinRatio},
         "-skipddp"  => \$V_Href->{SkipDeDupPhasedReads},
@@ -342,7 +343,7 @@ sub para_alert{
              || $V_Href->{haploCount} < 2
              || ( $V_Href->{baseQ_offset} != 33 && $V_Href->{baseQ_offset} != 64 )
              || $V_Href->{UKreadsFlankRegUnit} < 5E3
-             # || $V_Href->{UKreadsFlankRegUnitMaxTimes} < 1
+             || $V_Href->{UKreadsFlankRegUnitMaxTimes} < 1
              || $V_Href->{UKreadsMaxPhasedHetMut} < 0
              || $V_Href->{mapPosWinRatio} <= 0 || $V_Href->{mapPosWinRatio} > 0.5
              || $V_Href->{stepToStart} < 1 || $V_Href->{stepToStart} > $V_Href->{totalStepNO}
@@ -492,6 +493,12 @@ sub prepare{
             push @{$V_Href->{allHapComb}}, "h$hap_i,h$hap_j";
         }
     }
+
+    # prepare local region size
+    for (my $pw = 0; 2 ** $pw < $V_Href->{UKreadsFlankRegUnitMaxTimes}; $pw++){
+        push @{$V_Href->{UKreadsFlankRegUnitTimesAf}}, 2 ** $pw;
+    }
+    push @{$V_Href->{UKreadsFlankRegUnitTimesAf}}, $V_Href->{UKreadsFlankRegUnitMaxTimes};
 
     # prepare PEsplitStat (dEnd and sEnd) of step s01
     for my $hap_i (1 .. $V_Href->{haploCount}){

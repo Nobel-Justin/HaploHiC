@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.08";
-$DATE = '2018-12-29';
+$VERSION = "0.09";
+$DATE = '2019-01-04';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -68,75 +68,6 @@ sub phasePE_to_contactCount{
         &phasePE_contacts_to_count(tag => $tag);
     }
 }
-
-# #--- read smartPE BAM and do something on each pe_OB ---
-# sub smartBam_PEread{
-#     # options
-#     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
-#     my %parm = @_;
-#     my $bam = $parm{bam};
-#     my $mark = $parm{mark} || $bam->get_tag;
-#     my $viewOpt = $parm{viewOpt} || '';
-#     my $subrtRef = $parm{subrtRef};
-#     my $subrtParmAref = $parm{subrtParmAref} || [];
-#     my $peOB_AbufferSize = $parm{peOB_AbufferSize} || 1E5;
-#     my $deal_peOB_pool = $parm{deal_peOB_pool} || 0;
-#     my $quiet = $parm{quiet} || 0; # not inform PE Count
-#     my $simpleLoad = $parm{simpleLoad} || 0; # just record reads' basic information
-
-#     my $pe_Count = 0;
-#     my $pe_CountInform = $V_Href->{peC_ReportUnit};
-#     my $last_pid = '';
-#     my $last_peOB = undef;
-#     my @peOB_pool = ();
-#     my $fh = $bam->start_read(samtools => $V_Href->{samtools}, viewOpt => $viewOpt);
-#     while(<$fh>){
-#         my $reads_OB = BioFuse::BioInfo::Objects::HicReads_OB->new( ReadsLineText => $_, _rc_optfd => 1, _rc_rdstr => 1, simpleLoad => $simpleLoad );
-#         if( $reads_OB->get_pid ne $last_pid ){
-#             # deal last pe_OB
-#             $pe_Count++;
-#             push @peOB_pool, $last_peOB if( defined $last_peOB );
-#             if( $pe_Count % $peOB_AbufferSize == 0 ){
-#                 if($deal_peOB_pool){
-#                     &{$subrtRef}(pe_OB_poolAf => \@peOB_pool, @$subrtParmAref);
-#                 }
-#                 else{
-#                     &{$subrtRef}(pe_OB => $_, @$subrtParmAref) for @peOB_pool;
-#                 }
-#                 # sweep
-#                 @peOB_pool = ();
-#                 # inform
-#                 if($pe_Count >= $pe_CountInform){
-#                     stout_and_sterr "[INFO]\t".`date`
-#                                          ."\tload $pe_CountInform PE-reads from $mark bam.\n" unless $quiet;
-#                     $pe_CountInform += $V_Href->{peC_ReportUnit};
-#                 }
-#             }
-#             # create new pe_OB
-#             $last_peOB = BioFuse::BioInfo::Objects::HicPairEnd_OB->new;
-#             # update
-#             $last_pid = $reads_OB->get_pid;
-#         }
-#         # load this reads_OB to pe_OB
-#         $last_peOB->load_reads_OB(reads_OB => $reads_OB);
-#     }
-#     close $fh;
-#     # deal the last one
-#     if( defined $last_peOB ){
-#         push @peOB_pool, $last_peOB;
-#         if($deal_peOB_pool){
-#             &{$subrtRef}(pe_OB_poolAf => \@peOB_pool, @$subrtParmAref);
-#         }
-#         else{
-#             &{$subrtRef}(pe_OB => $_, @$subrtParmAref) for @peOB_pool;
-#         }
-#         # sweep
-#         @peOB_pool = ();
-#     }
-#     # inform
-#     stout_and_sterr "[INFO]\t".`date`
-#                          ."\tTotally, load $pe_Count PE-reads from $mark bam.\n" unless $quiet;
-# }
 
 #--- load contacts of phased PE-reads ---
 sub load_phasedPE_contacts{
@@ -272,15 +203,15 @@ sub get_rOBpair_HapLinkCount{
     my %mPos = map { ($_, $rOB{$_}->get_mpos) } keys %rOB;
     my %mExp = map { ($_, $mPos{$_}+$rOB{$_}->get_mRefLen-1) } keys %rOB;
     # try quick find from HapLinkC_pool
-    my $winIdx_a = Pos2Idx(pos => $mPos{a}, winSize => $V_Href->{UKreadsFlankRegUnit});
-    my $winIdx_b = Pos2Idx(pos => $mPos{b}, winSize => $V_Href->{UKreadsFlankRegUnit});
-    my $winTag_a = "$mSeg{a},w$winIdx_a";
-    my $winTag_b = "$mSeg{b},w$winIdx_b";
-    if(exists $HapLinkHf->{link}->{$winTag_a}){
-        if(exists $HapLinkHf->{link}->{$winTag_a}->{$winTag_b}){
-            # stout_and_sterr "quick find HapLink for $winTag_a,$mPos{a}-$mExp{a} $winTag_b,$mPos{b}-$mExp{b}\n"; # debug
+    my %winIdx = map {($_, Pos2Idx(pos => $mPos{$_}, winSize => $V_Href->{UKreadsFlankRegUnit}))} qw/a b/;
+    my %winTag = map {($_, "$mSeg{$_},w$winIdx{$_}")} qw/a b/;
+    if(    exists $HapLinkHf->{link}->{$winTag{a}}
+        # && rand(50000) > 1 # 1/50000 chance to sweep to avoid cumulative memory
+    ){
+        if(exists $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}}){
+            # stout_and_sterr "quick find HapLink for $winTag{a},$mPos{a}-$mExp{a} $winTag{b},$mPos{b}-$mExp{b}\n"; # debug
             $HapLinkHf->{stat}->{QuickFind} ++;
-            return @{ $HapLinkHf->{link}->{$winTag_a}->{$winTag_b} };
+            return @{ $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} };
         }
     }
     else{ # not find, must be next a-side bin-Idx
@@ -289,17 +220,16 @@ sub get_rOBpair_HapLinkCount{
     # iteratively find sufficient phased Het-Mut in local flank region
     my $chrHapLinkHref = $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}};
     my %fReg = map { ($_, {pos=>{},mct=>{}}) } keys %rOB;
-    for my $time ( 0 .. $V_Href->{UKreadsFlankRegUnitMaxTimes} ){
-        my $ext_ratio  = 2 ** $time;
+    for my $ext_ratio ( @{$V_Href->{UKreadsFlankRegUnitTimesAf}} ){
         my $FlankSize  = $ext_ratio * $V_Href->{UKreadsFlankRegUnit};
         my $PhaHetMutC = $ext_ratio * $V_Href->{UKreadsMaxPhasedHetMut};
-        for my $Ach (sort keys %rOB){
+        for my $s (sort keys %rOB){
             # extract phased Het-Mut in 5/3 prime flanking region
-            my $mSegLen = $V_Href->{ChrThings}->{$mSeg{$Ach}}->{len};
-            my $FlankSize_p5 = max($mPos{$Ach}-$FlankSize, 1       ) - $mPos{$Ach}; # negative value
-            my $FlankSize_p3 = min($mExp{$Ach}+$FlankSize, $mSegLen) - $mExp{$Ach}; # positive value
-            my $phMutOB_p5_Aref = PosToPhasedMut( chr => $mSeg{$Ach}, pos => $mPos{$Ach}, ext => $FlankSize_p5 );
-            my $phMutOB_p3_Aref = PosToPhasedMut( chr => $mSeg{$Ach}, pos => $mExp{$Ach}, ext => $FlankSize_p3 );
+            my $mSegLen = $V_Href->{ChrThings}->{$mSeg{$s}}->{len};
+            my $FlankSize_p5 = max($mPos{$s}-$FlankSize, 1       ) - $mPos{$s}; # negative value
+            my $FlankSize_p3 = min($mExp{$s}+$FlankSize, $mSegLen) - $mExp{$s}; # positive value
+            my $phMutOB_p5_Aref = PosToPhasedMut( chr => $mSeg{$s}, pos => $mPos{$s}, ext => $FlankSize_p5 );
+            my $phMutOB_p3_Aref = PosToPhasedMut( chr => $mSeg{$s}, pos => $mExp{$s}, ext => $FlankSize_p3 );
             # adjust phased Het-Mut count, if set
             my $phMutOB_p5_C = scalar(@$phMutOB_p5_Aref);
             my $phMutOB_p3_C = scalar(@$phMutOB_p3_Aref);
@@ -314,10 +244,10 @@ sub get_rOBpair_HapLinkCount{
                 }
             }
             # record
-            $fReg{$Ach}{mct}{p5} = $phMutOB_p5_C;
-            $fReg{$Ach}{mct}{p3} = $phMutOB_p3_C;
-            $fReg{$Ach}{pos}{p5} = ( ( $PhaHetMutC && $phMutOB_p5_C == $PhaHetMutC ) ? $phMutOB_p5_Aref->[ 0]->get_pos : $mPos{$Ach}+$FlankSize_p5 );
-            $fReg{$Ach}{pos}{p3} = ( ( $PhaHetMutC && $phMutOB_p3_C == $PhaHetMutC ) ? $phMutOB_p3_Aref->[-1]->get_pos : $mExp{$Ach}+$FlankSize_p3 );
+            $fReg{$s}{mct}{p5} = $phMutOB_p5_C;
+            $fReg{$s}{mct}{p3} = $phMutOB_p3_C;
+            $fReg{$s}{pos}{p5} = ( ( $PhaHetMutC && $phMutOB_p5_C == $PhaHetMutC ) ? $phMutOB_p5_Aref->[ 0]->get_pos : $mPos{$s}+$FlankSize_p5 );
+            $fReg{$s}{pos}{p3} = ( ( $PhaHetMutC && $phMutOB_p3_C == $PhaHetMutC ) ? $phMutOB_p3_Aref->[-1]->get_pos : $mExp{$s}+$FlankSize_p3 );
         }
         # extract the haplo link of a/b paired flank regions
         my %pIdx;
@@ -338,17 +268,36 @@ sub get_rOBpair_HapLinkCount{
         # find HapLink or last time
         my $hapCombCnt = scalar(keys %HapLinkCount);
         if(    $hapCombCnt
-            || $time == $V_Href->{UKreadsFlankRegUnitMaxTimes}
+            || $ext_ratio == $V_Href->{UKreadsFlankRegUnitTimesAf}->[-1]
         ){
             my $mark = $hapCombCnt ? 'RegionPhased' : 'RegionNotPhased';
             $mark .= ";($ext_ratio"
                     .",$mSeg{$_}:$fReg{$_}{pos}{p5}-$fReg{$_}{pos}{p3}"
+                    .",mPosWinIdx:$winIdx{$_}"
                     .",MCT5p:$fReg{$_}{mct}{p5}"
                     .",MCT3p:$fReg{$_}{mct}{p3})"
                     for sort keys %fReg;
-            # record and return
-            $HapLinkHf->{link}->{$winTag_a}->{$winTag_b} = [\%HapLinkCount, $mark];
+            # record
             $HapLinkHf->{stat}->{Calculate} ++;
+            $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} = [\%HapLinkCount, $mark];
+            # my $HapLinkCountAf = [\%HapLinkCount, $mark];
+            # my %winIdxToR = map {($_, [$winIdx{$_}, $winIdx{$_}])} qw /a b/;
+            # ## expand according to $pw2
+            # if($ext_ratio > 1){
+            #     my $pw2 = int(log($ext_ratio)/log(2));
+            #     for my $s (qw/a b/){
+            #         my %winIdxE = map {($_, Pos2Idx(pos => $fReg{$s}{pos}{$_}, winSize => $V_Href->{UKreadsFlankRegUnit}))} qw/p5 p3/;
+            #         my %winSpan = map {($_, int(abs($winIdx{$s}-$winIdxE{$_}) / $pw2))} qw/p5 p3/;
+            #         $winIdxToR{$s}->[0] = max($winIdx{$s}-$winSpan{p5}, $winIdxE{p5});
+            #         $winIdxToR{$s}->[1] = min($winIdx{$s}+$winSpan{p3}, $winIdxE{p3});
+            #     }
+            # }
+            # for my $winTag_a (map {"$mSeg{a},w$_"} ($winIdxToR{a}->[0] .. $winIdxToR{a}->[1])){
+            #     for my $winTag_b (map {"$mSeg{b},w$_"} ($winIdxToR{b}->[0] .. $winIdxToR{b}->[1])){
+            #         $HapLinkHf->{link}->{$winTag_a}->{$winTag_b} = $HapLinkCountAf;
+            #     }
+            # }
+            # return
             return (\%HapLinkCount, $mark);
         }
     }
