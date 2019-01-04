@@ -106,7 +106,7 @@ sub confirm_dEndUkHapPE_HapLink{
         my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});
         stout_and_sterr "[INFO]\t".`date`
                              ."\tassign haplotype to UK-end of PE-reads from $mark bam OK.\n"
-                             ."\tHapLinkStat: $HapLinkStat\n";
+                             ."\t$mark HapLinkStat: $HapLinkStat\n";
         # write report (3rd part)
         ## previous contents
         my @Content = split /\s+/, `cat $pairBamHref->{PEsplit_report}`;

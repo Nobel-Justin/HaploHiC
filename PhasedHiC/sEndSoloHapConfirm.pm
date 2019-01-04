@@ -119,7 +119,7 @@ sub confirm_sEndSoloHapPE_HapLink{
             my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});
             stout_and_sterr "[INFO]\t".`date`
                                  ."\tassign haplotype to UK-end of PE-reads from $mark bam OK.\n"
-                                 ."\tHapLinkStat: $HapLinkStat\n";
+                                 ."\t$mark HapLinkStat: $HapLinkStat\n";
         }
         # write report (2nd part)
         ## previous contents
