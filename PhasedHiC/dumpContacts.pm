@@ -27,8 +27,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
-$VERSION = "0.02";
-$DATE = '2018-12-30';
+$VERSION = "0.03";
+$DATE = '2019-01-27';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';

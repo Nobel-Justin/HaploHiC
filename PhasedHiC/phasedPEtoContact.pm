@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.09";
-$DATE = '2019-01-04';
+$VERSION = "0.10";
+$DATE = '2019-01-27';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -60,7 +60,7 @@ sub phasePE_to_contactCount{
     for my $tag (sort keys %$tagToBamHref){
         for my $hapSplitBam (@{$tagToBamHref->{$tag}}){
             # read phased bam
-            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&mPosToWinIdx]);
+            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&mPosToWinIdx, onlyPha => 1]);
             $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
         }
         # contacts to count
@@ -76,6 +76,7 @@ sub load_phasedPE_contacts{
     my %parm = @_;
     my $pe_OB = $parm{pe_OB};
     my $idxFunc = $parm{idxFunc};
+    my $onlyPha = $parm{onlyPha} || 0; # only use phased Hi-C pair
     # my $hapSort = $parm{hapSort} || 0; # currently, deprecated
 
     # get chr-pos ascending sorted all mapped reads_OB
@@ -89,8 +90,10 @@ sub load_phasedPE_contacts{
         warn_and_exit "<ERROR>\tPhased PE-reads doesn't have at least two haplotype confirmed alignments.\n".Dumper($pe_OB);
     }
     # skip hapComb set by flanking region lacking phased contacts, see func 'get_rOBpair_HapLinkCount'
-    if(    $hasHaprOB[ 0]->is_fromUnPhasedRegRand
-        || $hasHaprOB[-1]->is_fromUnPhasedRegRand
+    if(    $onlyPha
+        && (    $hasHaprOB[ 0]->is_fromUnPhasedRegRand
+            ||  $hasHaprOB[-1]->is_fromUnPhasedRegRand
+           )
     ){
         return; # do not take this PE into contact counting
     }
