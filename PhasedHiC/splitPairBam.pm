@@ -331,8 +331,9 @@ sub PEreads_to_splitBam{
     if( $SplitBam_tag =~ /^phMut-/ ){
         $pe_OB->addHapIDtoReadsOptfd(reads_end => $_) for (1,2);
     }
+
     # write PE to split-bam files
-    my $peSAM_Aref = $pe_OB->printSAM;
+    my $peSAM_Aref = $pe_OB->printSAM(keep_all=>1);
     ## 'XS:Z:' denotes marker of 'S'plit reason
     $_ .= "\tXS:Z:$Split_marker" for @$peSAM_Aref;
     ## add phMut supporting haplotype
@@ -846,7 +847,7 @@ sub write_peOB_to_chrPairBam{
         $chrPairBamHf->{$chrPairTag}->write(content => $_) for @{ $splitBam->get_SAMheader(samtools => $V_Href->{samtools}) };
     }
     # write to chr-pair bam
-    $chrPairBamHf->{$chrPairTag}->write(content => join("\n",@{$pe_OB->printSAM})."\n");
+    $chrPairBamHf->{$chrPairTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
 }
 
 #--- sort chrPair bams and write to new split bam ---
@@ -897,7 +898,7 @@ sub write_sort_peOB_to_newSplitBam{
         push @peCoord, [$i, $rOB_Af->[0]->get_mpos, $rOB_Af->[-1]->get_mpos];
     }
     # sort by pos and write to new split bam
-    $splitBam->write(content => join("\n",@{$pe_OB_poolAf->[$_->[0]]->printSAM})."\n") for sort {$a->[1] <=> $b->[1] || $a->[2] <=> $b->[2]} @peCoord;
+    $splitBam->write(content => join("\n",@{$pe_OB_poolAf->[$_->[0]]->printSAM(keep_all=>1)})."\n") for sort {$a->[1] <=> $b->[1] || $a->[2] <=> $b->[2]} @peCoord;
 }
 
 #--- 

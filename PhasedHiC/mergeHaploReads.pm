@@ -94,9 +94,16 @@ sub mergeReadsOfEachHapComb{
         $mergeBam->write(content => $_) for @{ $bamToMergeAf->[-1]->get_SAMheader(samtools => $V_Href->{samtools}) };
         ## copy reads
         for my $bamToMerge (@$bamToMergeAf){
-            my $fh = $bamToMerge->start_read(samtools => $V_Href->{samtools});
-            $mergeBam->write(content => $_) while(<$fh>);
-            close $fh;
+
+            ## original work, keep it at last
+            # my $fh = $bamToMerge->start_read(samtools => $V_Href->{samtools});
+            # $mergeBam->write(content => $_) while(<$fh>);
+            # close $fh;
+
+            ## make up work, delete it
+            my @subrtOpt = (subrtRef => \&write_peOB_to_mergeBam, subrtParmAref => [mergeBam => $mergeBam]);
+            $bamToMerge->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, @subrtOpt);
+
         }
         # stop writing mergedBam
         $mergeBam->stop_write;
@@ -105,6 +112,21 @@ sub mergeReadsOfEachHapComb{
         stout_and_sterr "[INFO]\t".`date`
                              ."\tmerge $mark bam OK.\n";
     }
+}
+
+#--- this is to make up the scenario lacks prime alignment ---
+# delete it
+sub write_peOB_to_mergeBam{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pe_OB = $parm{pe_OB};
+    my $mergeBam = $parm{mergeBam};
+
+    # make prime alignment
+    $pe_OB->makePrimeAlignment;
+    # write to merge bam
+    $mergeBam->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
 }
 
 #--- 

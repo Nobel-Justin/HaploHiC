@@ -29,8 +29,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.15";
-$DATE = '2018-12-29';
+$VERSION = "0.16";
+$DATE = '2019-01-29';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -194,7 +194,7 @@ sub assign_dEndUKend_haplotype{
     # output
     my $getHapTag = $assHapComb[0] eq $assHapComb[-1] ? "$tag.$assHapComb[0]Intra" : "$tag.hInter";
     # write PE to getHapBam files
-    $pairBamHref->{splitBam}->{$getHapTag}->write(content => join("\n",@{$pe_OB->printSAM})."\n");
+    $pairBamHref->{splitBam}->{$getHapTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
     # stat
     my $chrTag = $isIntraChr ? 'IntraChr' : 'InterChr';
     $V_Href->{PEsplitStat}->{"$getHapTag.$chrTag.$assignMethod"} ++;

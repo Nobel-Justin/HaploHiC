@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.05";
-$DATE = '2018-12-29';
+$VERSION = "0.06";
+$DATE = '2019-01-29';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -279,7 +279,7 @@ sub assign_sEndUKend_haplotype{
     $nonHap_rOB->add_str_to_optfd(str => "\tXU:Z:$mark");
     # write PE to getHapBam files
     my $getHapTag = $assHapID eq $hasHapID ? "$tag.${assHapID}Intra" : "$tag.hInter";
-    $pairBamHref->{splitBam}->{$getHapTag}->write(content => join("\n",@{$pe_OB->printSAM})."\n");
+    $pairBamHref->{splitBam}->{$getHapTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
     # stat
     my $chrTag = $isIntraChr ? 'IntraChr' : 'InterChr';
     $V_Href->{PEsplitStat}->{"$getHapTag.$chrTag.$assignMethod"} ++;

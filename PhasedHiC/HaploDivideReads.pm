@@ -348,7 +348,7 @@ sub para_alert{
              || !defined $V_Href->{samtools} || !-e $V_Href->{samtools}
              || !defined $V_Href->{db_dir}   || !-d $V_Href->{db_dir}
              || !defined $V_Href->{ref_version}
-             || ( !file_exist(filePath=>$V_Href->{PairBamList}) || scalar(@{$V_Href->{PairSourceBam}}) == 0 )
+             || ( !file_exist(filePath=>$V_Href->{PairBamList}) && scalar(@{$V_Href->{PairSourceBam}}) == 0 )
              || !defined $V_Href->{enzyme_type}
              || $V_Href->{haploCount} < 2
              || ( $V_Href->{baseQ_offset} != 33 && $V_Href->{baseQ_offset} != 64 )
