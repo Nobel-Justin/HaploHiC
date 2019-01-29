@@ -208,9 +208,7 @@ sub get_rOBpair_HapLinkCount{
     # try quick find from HapLinkC_pool
     my %winIdx = map {($_, Pos2Idx(pos => $mPos{$_}, winSize => $V_Href->{UKreadsFlankRegUnit}))} qw/a b/;
     my %winTag = map {($_, "$mSeg{$_},w$winIdx{$_}")} qw/a b/;
-    if(    exists $HapLinkHf->{link}->{$winTag{a}}
-        # && rand(50000) > 1 # 1/50000 chance to sweep to avoid cumulative memory
-    ){
+    if(exists $HapLinkHf->{link}->{$winTag{a}}){
         if(exists $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}}){
             # stout_and_sterr "quick find HapLink for $winTag{a},$mPos{a}-$mExp{a} $winTag{b},$mPos{b}-$mExp{b}\n"; # debug
             $HapLinkHf->{stat}->{QuickFind} ++;
@@ -269,11 +267,11 @@ sub get_rOBpair_HapLinkCount{
             delete $HapLinkCount{$_} for grep !/$hapRegex/, keys %HapLinkCount;
         }
         # find HapLink or last time
-        my $hapCombCnt = scalar(keys %HapLinkCount);
-        if(    $hapCombCnt
+        my $hapCombLinkReachMin = (scalar(keys %HapLinkCount) >= $V_Href->{hapCombMinLinkForPhaReg});
+        if(    $hapCombLinkReachMin
             || $ext_ratio == $V_Href->{UKreadsFlankRegUnitTimesAf}->[-1]
         ){
-            my $mark = $hapCombCnt ? 'RegionPhased' : 'RegionNotPhased';
+            my $mark = $hapCombLinkReachMin ? 'RegionPhased' : 'RegionNotPhased';
             $mark .= ";($ext_ratio"
                     .",$mSeg{$_}:$fReg{$_}{pos}{p5}-$fReg{$_}{pos}{p3}"
                     .",mPosWinIdx:$winIdx{$_}"
@@ -283,23 +281,6 @@ sub get_rOBpair_HapLinkCount{
             # record
             $HapLinkHf->{stat}->{Calculate} ++;
             $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} = [\%HapLinkCount, $mark];
-            # my $HapLinkCountAf = [\%HapLinkCount, $mark];
-            # my %winIdxToR = map {($_, [$winIdx{$_}, $winIdx{$_}])} qw /a b/;
-            # ## expand according to $pw2
-            # if($ext_ratio > 1){
-            #     my $pw2 = int(log($ext_ratio)/log(2));
-            #     for my $s (qw/a b/){
-            #         my %winIdxE = map {($_, Pos2Idx(pos => $fReg{$s}{pos}{$_}, winSize => $V_Href->{UKreadsFlankRegUnit}))} qw/p5 p3/;
-            #         my %winSpan = map {($_, int(abs($winIdx{$s}-$winIdxE{$_}) / $pw2))} qw/p5 p3/;
-            #         $winIdxToR{$s}->[0] = max($winIdx{$s}-$winSpan{p5}, $winIdxE{p5});
-            #         $winIdxToR{$s}->[1] = min($winIdx{$s}+$winSpan{p3}, $winIdxE{p3});
-            #     }
-            # }
-            # for my $winTag_a (map {"$mSeg{a},w$_"} ($winIdxToR{a}->[0] .. $winIdxToR{a}->[1])){
-            #     for my $winTag_b (map {"$mSeg{b},w$_"} ($winIdxToR{b}->[0] .. $winIdxToR{b}->[1])){
-            #         $HapLinkHf->{link}->{$winTag_a}->{$winTag_b} = $HapLinkCountAf;
-            #     }
-            # }
             # return
             return (\%HapLinkCount, $mark);
         }

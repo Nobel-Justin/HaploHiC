@@ -7,6 +7,7 @@ use File::Basename;
 use List::Util qw/ max /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::Sys qw/ file_exist trible_run_for_success /;
+use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::GetPath qw/ GetPath /;
@@ -33,8 +34,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.15";
-$DATE = '2019-01-04';
+$VERSION = "0.16";
+$DATE = '2019-01-28';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -64,10 +65,10 @@ sub return_HELP_INFO{
        # Inputs and Outputs #
         -phsvcf  [s]  phased sorted VCF file. <required>
         -outdir  [s]  folder to store results and temporary files. <required>
-        -bam     [s]  paired SE bam files. <required>
-                       Note: 1) PE Hi-C reads are always aligned seperatedly, e.g., BWA mem.
-                             2) inputs as: -bam a_R1.bam,a_R2.bam -bam b_R1.bam,b_R2.bam
-                             3) can applied for multiple runs: run-a, run-b, .., run-n
+        -bamlist [s]  list of paired SE bam files. <required>
+                       Note: 1) PE Hi-C reads are always aligned seperatedly.
+                             2) list multiple runs, one row one run.
+                             3) instance of run_c: run_c_R1.bam,run_c_R2.bam
 
        # Tools and Database #
         -samt    [s]  SAMtools. <required>
@@ -113,6 +114,7 @@ sub return_HELP_INFO{
         -mpwr    [f]  ratio of '-ucrfut' to set as window size to store phased contacts. [0.1]
                        Note: 1) the less this option is set, the more memory and cpu-time is consumed.
                              2) available interval: (0, 0.5].
+        -min_ct  [i]  the minimum contact count from phased pairs to confirm phased local regions. [1]
         -slbmpf  [s]  only deal with bam files with provided prefix. [all]
                        Note: 1) still load haplotypes contacts got from all bam files.
                              2) prefix's regex: /^(PREFIX)[\\._]R[12].*\\.bam\$/
@@ -140,7 +142,11 @@ sub return_HELP_INFO{
         # -use_sgum    use pe-reads having one unmapped end. [disabled]
         # -ucrftm  [s]  allow to extend the '-ucrfut' time by time till to this times. [10]
         #                Note: try next extend only when current flanking region has no phased contacts.
-                             # 2) option '-ucrftm' also works on this setting.
+        #                      2) option '-ucrftm' also works on this setting.
+        # -bam     [s]  paired SE bam files. <required>
+        #                Note: 1) PE Hi-C reads are always aligned seperatedly, e.g., BWA mem.
+        #                      2) inputs as: -bam a_R1.bam,a_R2.bam -bam b_R1.bam,b_R2.bam
+        #                      3) can applied for multiple runs: run-a, run-b, .., run-n
 }
 
 #--- load variant of this module to public variant (V_Href in LoadOn.pm) ---
@@ -159,7 +165,8 @@ sub Load_moduleVar_to_pubVarPool{
             # [ sampleID => undef ],
             [ phased_vcf => undef ],
             [ outdir => undef ],
-            [ PairBamList => [] ],
+            [ PairBamList => undef ],
+            [ PairSourceBam => [] ],
 
             # software and database
             [ samtools => undef ],
@@ -207,6 +214,7 @@ sub Load_moduleVar_to_pubVarPool{
             [ UKreadsFlankRegUnitTimesAf => [] ],
             [ UKreadsMaxPhasedHetMut => 5 ],
             [ SkipDeDupPhasedReads => 0 ],
+            [ hapCombMinLinkForPhaReg => 1 ],
             ## dump contacts
             [ dumpMode => 'BP' ],
             [ dumpBinSize => '1MB' ],
@@ -283,7 +291,8 @@ sub Get_Cmd_Options{
         # "-sampid:s" => \$V_Href->{sampleID},
         "-phsvcf:s" => \$V_Href->{phased_vcf},
         "-outdir:s" => \$V_Href->{outdir},
-        "-bam:s"    => \@{$V_Href->{PairBamList}},
+        "-bamlist:s"=> \$V_Href->{PairBamList},
+        "-bam:s"    => \@{$V_Href->{PairSourceBam}}, # hidden option
         # tools and datbase
         "-samt:s"   => \$V_Href->{samtools},
         "-db_dir:s" => \$V_Href->{db_dir},
@@ -319,6 +328,7 @@ sub Get_Cmd_Options{
         "-ucrpha:i" => \$V_Href->{UKreadsMaxPhasedHetMut},
         "-mpwr:f"   => \$V_Href->{mapPosWinRatio},
         "-skipddp"  => \$V_Href->{SkipDeDupPhasedReads},
+        "-min_ct:i" => \$V_Href->{hapCombMinLinkForPhaReg},
         ## dump contacts
         "-dpmode:s" => \$V_Href->{dumpMode},
         "-dpbin:s"  => \$V_Href->{dumpBinSize},
@@ -338,7 +348,7 @@ sub para_alert{
              || !defined $V_Href->{samtools} || !-e $V_Href->{samtools}
              || !defined $V_Href->{db_dir}   || !-d $V_Href->{db_dir}
              || !defined $V_Href->{ref_version}
-             || scalar(@{$V_Href->{PairBamList}}) == 0
+             || ( !file_exist(filePath=>$V_Href->{PairBamList}) || scalar(@{$V_Href->{PairSourceBam}}) == 0 )
              || !defined $V_Href->{enzyme_type}
              || $V_Href->{haploCount} < 2
              || ( $V_Href->{baseQ_offset} != 33 && $V_Href->{baseQ_offset} != 64 )
@@ -412,21 +422,31 @@ sub check_files{
     }
 
     # PairBamFiles
+    ## load list of pair-se-bam if provide
+    if(file_exist(filePath=>$V_Href->{PairBamList})){
+      open (BAMLIST, Try_GZ_Read($V_Href->{PairBamList})) || die "fail reading PairBamList: $!\n";
+      while(<BAMLIST>){
+        chomp;
+        push @{$V_Href->{PairSourceBam}}, $_;
+      }
+      close BAMLIST;
+    }
+    ## record pair-se-bam
     my %preBamFiles;
-    for my $PairBamList (@{$V_Href->{PairBamList}}){
-        if ($PairBamList =~ /^([^,]+R1[^,]*\.bam),([^,]+R2[^,]*\.bam)$/){
+    for my $PairSourceBam (@{$V_Href->{PairSourceBam}}){
+        if ($PairSourceBam =~ /^([^,]+R1[^,]*\.bam),([^,]+R2[^,]*\.bam)$/){
             my ($R1_bam_path, $R2_bam_path) = ($1, $2);
             if(    !file_exist(filePath=>$R1_bam_path)
                 || !file_exist(filePath=>$R2_bam_path)
             ){
                 warn_and_exit "<ERROR>\tbam file does not existfrom input:\n"
-                                    ."\t$PairBamList\n";
+                                    ."\t$PairSourceBam\n";
             }
             if(    exists $preBamFiles{$R1_bam_path}
                 || exists $preBamFiles{$R2_bam_path}
             ){
                 warn_and_exit "<ERROR>\tencounter same bam file again from input:\n"
-                                    ."\t$PairBamList\n";
+                                    ."\t$PairSourceBam\n";
             }
             # prepare output prefix
             ( my $R1_bam_prefix = basename($R1_bam_path) ) =~ s/[\.\_]R1.*\.bam$//;
@@ -436,7 +456,7 @@ sub check_files{
                 || exists $preBamFiles{$R1_bam_prefix}
             ){
                 warn_and_exit "<ERROR>\trequires valid prefix of bam files from input:\n"
-                                    ."\t$PairBamList\n";
+                                    ."\t$PairSourceBam\n";
             }
             # bam object
             my $R1_bam = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $R1_bam_path, tag => $R1_bam_prefix);
@@ -448,7 +468,7 @@ sub check_files{
         }
         else{
             warn_and_exit "<ERROR>\tcannot recognize R1/R2.bam files from input:\n"
-                                ."\t$PairBamList\n";
+                                ."\t$PairSourceBam\n";
         }
     }
 

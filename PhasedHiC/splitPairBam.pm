@@ -204,7 +204,7 @@ sub startWriteSplitBam{
        # $PG_info .= " -sampid $V_Href->{sampleID}";
        $PG_info .= " -phsvcf $V_Href->{phased_vcf}";
        $PG_info .= " -outdir $V_Href->{outdir}";
-       $PG_info .= " -bam $_" for @{$V_Href->{PairBamList}};
+       $PG_info .= " -bam $_" for @{$V_Href->{PairSourceBam}};
        $PG_info .= " -samt $V_Href->{samtools}";
        $PG_info .= " -db_dir $V_Href->{db_dir}";
        $PG_info .= " -ref_v $V_Href->{ref_version}";
