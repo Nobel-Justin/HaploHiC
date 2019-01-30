@@ -94,16 +94,13 @@ sub mergeReadsOfEachHapComb{
         $mergeBam->write(content => $_) for @{ $bamToMergeAf->[-1]->get_SAMheader(samtools => $V_Href->{samtools}) };
         ## copy reads
         for my $bamToMerge (@$bamToMergeAf){
-
-            ## original work, keep it at last
-            # my $fh = $bamToMerge->start_read(samtools => $V_Href->{samtools});
-            # $mergeBam->write(content => $_) while(<$fh>);
-            # close $fh;
-
-            ## make up work, delete it
-            my @subrtOpt = (subrtRef => \&write_peOB_to_mergeBam, subrtParmAref => [mergeBam => $mergeBam]);
-            $bamToMerge->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
-
+            ## official process!!!
+            my $fh = $bamToMerge->start_read(samtools => $V_Href->{samtools});
+            $mergeBam->write(content => $_) while(<$fh>);
+            close $fh;
+            ## used to solve 'lacking prime alignment' of allelic HiC project in Umich!!!
+            # my @subrtOpt = (subrtRef => \&write_peOB_to_mergeBam, subrtParmAref => [mergeBam => $mergeBam]);
+            # $bamToMerge->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
         }
         # stop writing mergedBam
         $mergeBam->stop_write;
@@ -115,19 +112,19 @@ sub mergeReadsOfEachHapComb{
 }
 
 #--- this is to make up the scenario lacks prime alignment ---
-# delete it
-sub write_peOB_to_mergeBam{
-    # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
-    my %parm = @_;
-    my $pe_OB = $parm{pe_OB};
-    my $mergeBam = $parm{mergeBam};
+## used to solve 'lacking prime alignment' of allelic HiC project in Umich!!!
+# sub write_peOB_to_mergeBam{
+#     # options
+#     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+#     my %parm = @_;
+#     my $pe_OB = $parm{pe_OB};
+#     my $mergeBam = $parm{mergeBam};
 
-    # make prime alignment
-    $pe_OB->makePrimeAlignment;
-    # write to merge bam
-    $mergeBam->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
-}
+#     # make prime alignment
+#     $pe_OB->makePrimeAlignment;
+#     # write to merge bam
+#     $mergeBam->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
+# }
 
 #--- 
 1; ## tell the perl script the successful access of this module.

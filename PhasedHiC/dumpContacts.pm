@@ -27,8 +27,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
-$VERSION = "0.03";
-$DATE = '2019-01-27';
+$VERSION = "0.04";
+$DATE = '2019-01-30';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -175,15 +175,29 @@ sub contacts_output{
                 my $wg_pIdx_i = $chr_i_preChrBinSum + $chr_pIdx_i;
                 for my $chr_pIdx_j (sort {$a<=>$b} keys %{$pIdxComb_Href->{$chr_pIdx_i}}){
                     my $wg_pIdx_j = $chr_j_preChrBinSum + $chr_pIdx_j;
-                    for my $hapComb (sort keys %{$pIdxComb_Href->{$chr_pIdx_i}->{$chr_pIdx_j}}){
+                    my $hapComb_Href = $pIdxComb_Href->{$chr_pIdx_i}->{$chr_pIdx_j};
+                    # sum inter-haplotype same wg-idx contacts, e.g., Win2(h1,h2) + Win2(h2,h1)
+                    my %skip_hapComb;
+                    for my $hapComb (sort keys %$hapComb_Href){
                         my ($hap_i, $hap_j) = split /,/, $hapComb;
+                        my $contact_count = $hapComb_Href->{$hapComb};
+                        # add pair hapComb if it is inter-haplotype same wg-idx
+                        if(    $wg_pIdx_i == $wg_pIdx_j
+                            && $hap_i ne $hap_j
+                        ){
+                            next if exists $skip_hapComb{$hapComb};
+                            my $pair_hapComb = "$hap_j,$hap_i";
+                            $contact_count += ($hapComb_Href->{$pair_hapComb} || 0);
+                            $skip_hapComb{$pair_hapComb} = 1;
+                        }
+                        # output
                         print CNTC join("\t", "$hap_i:$chr_i",
                                               $chr_pIdx_i,
                                               $wg_pIdx_i,
                                               "$hap_j:$chr_j",
                                               $chr_pIdx_j,
                                               $wg_pIdx_j,
-                                              $pIdxComb_Href->{$chr_pIdx_i}->{$chr_pIdx_j}->{$hapComb})."\n";
+                                              $contact_count)."\n";
                     }
                 }
             }
