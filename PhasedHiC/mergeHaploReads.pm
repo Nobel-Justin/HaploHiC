@@ -102,7 +102,7 @@ sub mergeReadsOfEachHapComb{
 
             ## make up work, delete it
             my @subrtOpt = (subrtRef => \&write_peOB_to_mergeBam, subrtParmAref => [mergeBam => $mergeBam]);
-            $bamToMerge->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, @subrtOpt);
+            $bamToMerge->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
 
         }
         # stop writing mergedBam
