@@ -13,7 +13,8 @@ use BioFuse::Util::Array qw/ binarySearch /;
 use BioFuse::Util::Interval qw/ Get_Two_Seg_Olen /;
 use HaploHiC::LoadOn;
 use HaploHiC::GetPath qw/ GetPath /;
-use HaploHiC::Extensions::JuicerDumpBP qw/ load_chr_Things /;
+use HaploHiC::Extensions::JuicerDump qw/ load_chr_Things /;
+use HaploHiC::PhasedHiC::dumpContacts qw/ load_enzyme_site_list /;
 
 require Exporter;
 
@@ -23,7 +24,6 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 @ISA = qw(Exporter);
 @EXPORT = qw/
               DumpFRAGtoGeneLevel
-              load_enzyme_site_list
             /;
 @EXPORT_OK = qw();
 %EXPORT_TAGS = ( DEFAULT => [qw()],
@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::Extensions::FRAG2Gene';
 #----- version --------
-$VERSION = "0.08";
-$DATE = '2018-11-14';
+$VERSION = "0.09";
+$DATE = '2019-01-31';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -49,7 +49,6 @@ my @functoion_list = qw/
                         convert_frag_to_gene_contacts
                         load_region_list
                         load_gene_info
-                        load_enzyme_site_list
                         load_gene_psl
                         load_gene_list
                         check_files
@@ -62,13 +61,13 @@ sub return_HELP_INFO{
      
      Options:
 
-       # obtain gene-level contacts based on results of dump_FRAG func, only for bin_size=1  #
+       # obtain gene-level contacts based on results of juicerDump func, only for FRAG:1  #
 
        # Inputs and Outputs #
         -fragct [s]  FRAG mode contacts result. <required>
                       Note: 1) bin_size must be 1.
-                            2) gene-level contacts output in same folder.
-                            3) merged.txt result from 'dump_FRAG' function.
+                            2) gene-level contacts will output in same folder.
+                            3) merged.txt result from 'juicerDump' function with FRAG mode.
         -db_dir [s]  database folder made by 'juicer_db' function. <required>
         -ref_v  [s]  version of reference genome, see contents under 'db_dir'. <required>
         -output [s]  gene-level contacts output. [optional]
@@ -88,7 +87,6 @@ sub return_HELP_INFO{
         -mindis [i]  minimum distance between two genes/regions to calculate contacts. [1000]
                       Note: gene/region pairs having overlap are filtered out.
         -hInter      note the FRAG contacts are inter-haplotype, default is intra-haplotype.
-        -gzip        gzip compress the output file. [disabled]
 
         -h|help      Display this help info.
 
@@ -122,13 +120,13 @@ sub Load_moduleVar_to_pubVarPool{
             # options
             [ enzyme_type => undef ],
             [ gene_type => 'protein_coding,lincRNA,miRNA' ],
-            [ gzip_output => 0 ],
+            [ gzip_output => 1 ],
             [ gene_extent => 0 ],
             [ gene_extent_to_reach => 0 ],
             [ gene_list_for_single_side => 0 ],
             [ minimum_cmp_distance => 1000 ],
             [ is_hInter => 0 ],
-            [ isFrom_dump_FRAG => 0 ],
+            [ isFrom_juicerDump => 0 ],
             [ isFrom_dumpContacts => 0 ],
             [ haploCount => undef ],
             [ hapComb => {} ],
@@ -171,7 +169,7 @@ sub Get_Cmd_Options{
         "-gextr:s"  => \$V_Href->{gene_extent_to_reach},
         "-glsgsd"   => \$V_Href->{gene_list_for_single_side},
         "-mindis:i" => \$V_Href->{minimum_cmp_distance},
-        "-gzip"     => \$V_Href->{gzip_output},
+        # "-gzip"     => \$V_Href->{gzip_output},
         "-hInter"   => \$V_Href->{is_hInter},
         # help
         "-h|help"   => \$V_Href->{HELP},
@@ -193,14 +191,14 @@ sub para_alert{
             );
 }
 
-#--- calculate gene-level contacts from dump_FRAG result ---
+#--- calculate gene-level contacts from dump(FRAG) result ---
 sub DumpFRAGtoGeneLevel{
     # basic
     &check_files;
     load_chr_Things;
 
     # load restriction enzyme site
-    &load_enzyme_site_list;
+    load_enzyme_site_list;
 
     # load concern region if user provided
     &load_region_list;
@@ -535,23 +533,6 @@ sub load_gene_info{
     &load_gene_psl;
 }
 
-#--- load enzyme site position list ---
-sub load_enzyme_site_list{
-    # read gene-psl file
-    open (EMLIST, Try_GZ_Read($V_Href->{enzyme_site})) || die "fail read  enzyme sitelist: $!\n";
-    while(<EMLIST>){
-        next if(/^#/);
-        my @info = split;
-        my $chr = shift @info;
-        $V_Href->{chr2enzymePos}->{$chr} = \@info;
-    }
-    close EMLIST;
-
-    # inform
-    stout_and_sterr "[INFO]\t".`date`
-                         ."\tread enzyme site DONE\n";
-}
-
 #--- load gene PSL ---
 sub load_gene_psl{
 
@@ -626,7 +607,7 @@ sub load_gene_list{
                          ."\tread gene list DONE\n";
 }
 
-#--- check dump_FRAG result ---
+#--- check dump(FRAG) result ---
 sub check_files{
     # database file
     $V_Href->{chrLenFile} = GetPath(filekey => 'chrLenFile');
@@ -643,12 +624,12 @@ sub check_files{
     }
     # match juicer's output folder structure
     $V_Href->{frag_contact_dir} = dirname($V_Href->{frag_contact});
-    $V_Href->{isFrom_dump_FRAG} = $V_Href->{frag_contact_dir} =~ /aligned\b/ ? 1 : 0;
+    $V_Href->{isFrom_juicerDump} = $V_Href->{frag_contact_dir} =~ /aligned\b/ ? 1 : 0;
     # FRAG_binSize is 1 ?
-    if(    $V_Href->{isFrom_dump_FRAG}
+    if(    $V_Href->{isFrom_juicerDump}
         && $V_Href->{frag_contact_dir} !~ /FRAG1$/
     ){
-        warn_and_exit "<ERROR>\tPlease make sure this file is from 'dump_FRAG' function with bin_size as 1.\n"
+        warn_and_exit "<ERROR>\tPlease make sure this file is from 'juicerDump' function (FRAG mode) with bin_size as 1.\n"
                             ."\t$V_Href->{frag_contact}\n";
     }
     else{

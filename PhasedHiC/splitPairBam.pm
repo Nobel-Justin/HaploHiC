@@ -14,7 +14,7 @@ use BioFuse::BioInfo::Objects::HicReads_OB;
 use BioFuse::BioInfo::Objects::HicPairEnd_OB;
 use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
-use HaploHiC::Extensions::FRAG2Gene qw/ load_enzyme_site_list /;
+use HaploHiC::PhasedHiC::dumpContacts qw/ load_enzyme_site_list /;
 use HaploHiC::PhasedHiC::phasedMutWork qw/ PosToPhasedMut release_phaseMut_OB /;
 
 require Exporter;

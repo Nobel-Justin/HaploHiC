@@ -11,7 +11,7 @@ use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::GetPath qw/ GetPath /;
-use HaploHiC::Extensions::JuicerDumpBP qw/ load_chr_Things /;
+use HaploHiC::Extensions::JuicerDump qw/ load_chr_Things /;
 use HaploHiC::PhasedHiC::phasedMutWork qw/ load_phased_VCF release_phaseMut_OB /;
 use HaploHiC::PhasedHiC::splitPairBam qw/ divide_pairBam /;
 use HaploHiC::PhasedHiC::dEndUkHapConfirm qw/ dEndUK_get_HapLink /;
@@ -222,6 +222,7 @@ sub Load_moduleVar_to_pubVarPool{
             [ dumpPEcontact => {} ], # just record counts from 'dumpPEdetails' hash, similar to 'phasePEcontact'
             [ dumpSubDir => 'dumpContacts' ],
             [ dumpOutput => undef ], # output
+            [ dumpHeader => undef ], # output
             [ dumpBinLog => undef ], # output
             [ dumpHapComb => undef ], # select HapComb (h[x]Intra and hInter) to dump contacts
             ### FRAG specific

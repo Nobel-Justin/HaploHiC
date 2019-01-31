@@ -7,21 +7,13 @@
       "module" : "HaploHiC::Extensions::ShellForJuicer",
       "main_func" : "shell_to_run_juicer"
    },
-   "dump_BP" : {
+   "juicerDump" : {
       "mode_NO" : 2,
-      "descp" : "run dump BP mode, and merge the inter-chr and intra-chr.",
+      "descp" : "run juicer dump, and merge the inter-chr and intra-chr.",
       "_group" : "-",
-      "_comments" : "run dump in BP mode, merge the inter-chr and intra-chr",
-      "module" : "HaploHiC::Extensions::JuicerDumpBP",
-      "main_func" : "JuicerDumpBPWrok"
-   },
-   "dump_FRAG" : {
-      "mode_NO" : 3,
-      "descp" : "run dump FRAG mode, and merge the inter-chr and intra-chr.",
-      "_group" : "-",
-      "_comments" : "run dump in FRAG mode, merge the inter-chr and intra-chr",
-      "main_func" : "JuicerDumpFRAGWrok",
-      "module" : "HaploHiC::Extensions::JuicerDumpFRAG"
+      "_comments" : "run juicer dump, merge the inter-chr and intra-chr",
+      "module" : "HaploHiC::Extensions::JuicerDump",
+      "main_func" : "JuicerDumpWrok"
    },
    "FRAG_gene" : {
       "mode_NO" : 4,

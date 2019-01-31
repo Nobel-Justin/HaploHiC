@@ -7,12 +7,12 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## Check.pm
 ### HaploHiC::Check
-### VERSION = "0.01"
+### VERSION = "0.02"
 - check
 
 ## PhasedHiC/sEndSoloHapConfirm.pm
 ### HaploHiC::PhasedHiC::sEndSoloHapConfirm
-### VERSION = "0.05"
+### VERSION = "0.06"
 - sEndhx_get_HapLink
 - confirm_sEndSoloHapPE_HapLink
 - prepareGetHapBamObj
@@ -23,17 +23,20 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/dumpContacts.pm
 ### HaploHiC::PhasedHiC::dumpContacts
-### VERSION = "0.02"
+### VERSION = "0.04"
 - dump_contacts
+- load_enzyme_site_list
 - get_contacts_idx
+- get_dumpHeader
+- write_dumpBinLog
 - contacts_output
 
 ## PhasedHiC/splitPairBam.pm
 ### HaploHiC::PhasedHiC::splitPairBam
-### VERSION = "0.17"
+### VERSION = "0.18"
 - divide_pairBam
 - prepareSplitBamObj
-- SourceToSplitBam
+- sourceToSplitBam
 - startWriteSplitBam
 - loadrOBfromSourceBam
 - rOB_to_peOB
@@ -50,7 +53,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/HaploDivideReads.pm
 ### HaploHiC::PhasedHiC::HaploDivideReads
-### VERSION = "0.15"
+### VERSION = "0.16"
 - return_HELP_INFO
 - Load_moduleVar_to_pubVarPool
 - Get_Cmd_Options
@@ -61,7 +64,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/phasedPEtoContact.pm
 ### HaploHiC::PhasedHiC::phasedPEtoContact
-### VERSION = "0.08"
+### VERSION = "0.10"
 - phasePE_to_contactCount
 - load_phasedPE_contacts
 - mPosToWinIdx
@@ -76,7 +79,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/dEndUkHapConfirm.pm
 ### HaploHiC::PhasedHiC::dEndUkHapConfirm
-### VERSION = "0.15"
+### VERSION = "0.16"
 - dEndUK_get_HapLink
 - confirm_dEndUkHapPE_HapLink
 - assign_dEndUKend_haplotype
@@ -100,12 +103,26 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## LoadOn.pm
 ### HaploHiC::LoadOn
-### VERSION = "0.51"
+### VERSION = "0.50"
 - load_variants_dict
+
+## Extensions/JuicerDump.pm
+### HaploHiC::Extensions::JuicerDump
+### VERSION = "0.10"
+- return_HELP_INFO
+- Load_moduleVar_to_pubVarPool
+- Get_Cmd_Options
+- para_alert
+- JuicerDumpWrok
+- check_juicer_files
+- make_workspace
+- load_chr_Things
+- getPairChrDump
+- mergePairChrDump
 
 ## Extensions/ShellForJuicer.pm
 ### HaploHiC::Extensions::ShellForJuicer
-### VERSION = "0.06"
+### VERSION = "0.07"
 - return_HELP_INFO
 - Load_moduleVar_to_pubVarPool
 - Get_Cmd_Options
@@ -127,35 +144,9 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 - gene_anno_part
 - enzyme_site_part
 
-## Extensions/JuicerDumpFRAG.pm
-### HaploHiC::Extensions::JuicerDumpFRAG
-### VERSION = "0.04"
-- return_HELP_INFO
-- Load_moduleVar_to_pubVarPool
-- Get_Cmd_Options
-- para_alert
-- JuicerDumpFRAGWrok
-- get_merged_dump_frag
-
-## Extensions/JuicerDumpBP.pm
-### HaploHiC::Extensions::JuicerDumpBP
-### VERSION = "0.09"
-- return_HELP_INFO
-- Load_moduleVar_to_pubVarPool
-- Get_Cmd_Options
-- para_alert
-- JuicerDumpBPWrok
-- check_juicer_files
-- make_workspace
-- load_chr_Things
-- get_interChr
-- get_intraChr
-- convert_intraChr_PosToBinIdx
-- merge_inter_intra
-
 ## Extensions/FRAG2Gene.pm
 ### HaploHiC::Extensions::FRAG2Gene
-### VERSION = "0.08"
+### VERSION = "0.09"
 - return_HELP_INFO
 - Load_moduleVar_to_pubVarPool
 - Get_Cmd_Options
@@ -166,14 +157,13 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 - convert_frag_to_gene_contacts
 - load_region_list
 - load_gene_info
-- load_enzyme_site_list
 - load_gene_psl
 - load_gene_list
 - check_files
 
 ## RunFunc.pm
 ### HaploHiC::RunFunc
-### VERSION = "0.51"
+### VERSION = "0.52"
 - options_alert_and_run
 - func_run
 - load_functions

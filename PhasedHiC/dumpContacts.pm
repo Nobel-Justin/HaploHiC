@@ -9,7 +9,6 @@ use BioFuse::Util::Array qw/ binarySearch /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
-use HaploHiC::Extensions::FRAG2Gene qw/ load_enzyme_site_list /;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ load_phasedPE_contacts phasePE_contacts_to_count /;
 
 require Exporter;
@@ -20,6 +19,10 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 @ISA = qw(Exporter);
 @EXPORT = qw/
               dump_contacts
+              load_enzyme_site_list
+              get_contacts_idx
+              get_dumpHeader
+              write_dumpBinLog
             /;
 @EXPORT_OK = qw();
 %EXPORT_TAGS = ( DEFAULT => [qw()],
@@ -28,7 +31,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
 $VERSION = "0.04";
-$DATE = '2019-01-30';
+$DATE = '2019-01-31';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -37,7 +40,10 @@ $EMAIL = 'wenlongkxm@gmail.com';
 #--------- functions in this pm --------#
 my @functoion_list = qw/
                         dump_contacts
+                        load_enzyme_site_list
                         get_contacts_idx
+                        get_dumpHeader
+                        write_dumpBinLog
                         contacts_output
                      /;
 
@@ -54,7 +60,7 @@ sub dump_contacts{
     # use real number of bin_size
     $V_Href->{dumpBinSize} = $V_Href->{dump_allowBinSize}->{$V_Href->{dumpMode}}->{uc($V_Href->{dumpBinSize})};
     # load enzyme sites list in FRAG mode
-    load_enzyme_site_list if($V_Href->{dumpMode} eq 'FRAG');
+    &load_enzyme_site_list if($V_Href->{dumpMode} eq 'FRAG');
 
     # all OR specific tags, and check empty
     my @tag = sort keys %tagToMergeBam;
@@ -88,6 +94,23 @@ sub dump_contacts{
     exit(0) if $V_Href->{stepToStop} == 5;
 }
 
+#--- load enzyme site position list ---
+sub load_enzyme_site_list{
+    # read gene-psl file
+    open (EMLIST, Try_GZ_Read($V_Href->{enzyme_site})) || die "fail read  enzyme sitelist: $!\n";
+    while(<EMLIST>){
+        next if(/^#/);
+        my @info = split;
+        my $chr = shift @info;
+        $V_Href->{chr2enzymePos}->{$chr} = \@info;
+    }
+    close EMLIST;
+
+    # inform
+    stout_and_sterr "[INFO]\t".`date`
+                         ."\tread enzyme site DONE\n";
+}
+
 #--- get contact idx in given mode ---
 sub get_contacts_idx{
     # options
@@ -111,6 +134,43 @@ sub get_contacts_idx{
     }
 }
 
+#--- prepare header of dump file ---
+sub get_dumpHeader{
+    $V_Href->{dumpHeader}  = "##dumpMode: $V_Href->{dumpMode}, dumpBinSize: $V_Href->{dumpBinSize}\n";
+    $V_Href->{dumpHeader} .= "##enzyme: $V_Href->{enzyme_type}\n"    if $V_Href->{dumpMode} eq 'FRAG';
+    $V_Href->{dumpHeader} .= "##haploCount: $V_Href->{haploCount}\n" if $V_Href->{haploCount};
+    $V_Href->{dumpHeader} .= "##".`date`;
+}
+
+#--- write chr-bin-range log of each refseg ---
+sub write_dumpBinLog{
+    open (CHRBR, Try_GZ_Write($V_Href->{dumpBinLog})) || die "cannot write chr-bin-range file: $!\n";
+    print CHRBR $V_Href->{dumpHeader};
+    print CHRBR join("\t", '#chr', 'chr_len', 'chrBinIdx_st', 'chrBinIdx_ed', 'wgBinIdx_st', "wgBinIdx_ed\n");
+    my $preChrBinSum = 0;
+    my @chr_Href = sort { $a->{turn} <=> $b->{turn} } values %{$V_Href->{ChrThings}};
+    for my $chr_Href (@chr_Href){
+        my $chr = $chr_Href->{chr};
+        my $chrlen = $chr_Href->{len};
+        my $thisChrFirstIdx =  &get_contacts_idx(chr => $chr, pos => 1);
+        my $thisChrLastIdx  =  &get_contacts_idx(chr => $chr, pos => $chrlen);
+        my $thisChrBinCount =  &get_contacts_idx(chr => $chr, pos => $chrlen, get_remainder => 1)
+                             ? $thisChrLastIdx + 1
+                             : $thisChrLastIdx;
+        print CHRBR join("\t", $chr,
+                               $chrlen,
+                               $thisChrFirstIdx,
+                               $thisChrLastIdx,
+                               $preChrBinSum+$thisChrFirstIdx,
+                               $preChrBinSum+$thisChrLastIdx) . "\n";
+        # record preChrBinSum of this chr
+        $chr_Href->{preChrBinSum} = $preChrBinSum;
+        # update
+        $preChrBinSum += $thisChrBinCount;
+    }
+    close CHRBR;
+}
+
 #--- contacts output and bin log ---
 sub contacts_output{
     # options
@@ -121,47 +181,23 @@ sub contacts_output{
     my $dumpOutDir = catfile($V_Href->{outdir}, $V_Href->{dumpSubDir});
     (-d $dumpOutDir || `mkdir -p $dumpOutDir`);
     my $output_prefix = "dumpContacts.$V_Href->{dumpMode}.$V_Href->{dumpBinSize}";
-    my $output_header = "##dumpMode: $V_Href->{dumpMode}, dumpBinSize: $V_Href->{dumpBinSize}\n"
-                       .($V_Href->{dumpMode} eq 'FRAG' ? "##enzyme: $V_Href->{enzyme_type}\n" : '')
-                       ."##haploCount: $V_Href->{haploCount}\n"
-                       ."##".`date`;
 
-    my @chr_Href = sort { $a->{turn} <=> $b->{turn} } values %{$V_Href->{ChrThings}};
+    # dump header
+    &get_dumpHeader;
+
     # get chr-idx interval
-    ## chr-bin-range log
+    ## chr-bin-range log, only first time
     if(!defined $V_Href->{dumpBinLog}){
         $V_Href->{dumpBinLog} = catfile($dumpOutDir, "$output_prefix.chrBinRange.txt");
-        open (CHRBR, Try_GZ_Write($V_Href->{dumpBinLog})) || die "cannot write chr-bin-range file: $!\n";
-        print CHRBR $output_header;
-        print CHRBR join("\t", '#chr', 'chr_len', 'chrBinIdx_st', 'chrBinIdx_ed', 'wgBinIdx_st', "wgBinIdx_ed\n");
-        my $preChrBinSum = 0;
-        for my $chrHref (@chr_Href){
-            my $chr = $chrHref->{chr};
-            my $chrlen = $chrHref->{len};
-            my $thisChrFirstIdx =  &get_contacts_idx(chr => $chr, pos => 1);
-            my $thisChrLastIdx  =  &get_contacts_idx(chr => $chr, pos => $chrlen);
-            my $thisChrBinCount =  &get_contacts_idx(chr => $chr, pos => $chrlen, get_remainder => 1)
-                                 ? $thisChrLastIdx + 1
-                                 : $thisChrLastIdx;
-            print CHRBR join("\t", $chr,
-                                   $chrlen,
-                                   $thisChrFirstIdx,
-                                   $thisChrLastIdx,
-                                   $preChrBinSum+$thisChrFirstIdx,
-                                   $preChrBinSum+$thisChrLastIdx) . "\n";
-            # record preChrBinSum of this chr
-            $chrHref->{preChrBinSum} = $preChrBinSum;
-            # update
-            $preChrBinSum += $thisChrBinCount;
-        }
-        close CHRBR;
+        &write_dumpBinLog;
     }
 
     # output contacts
     $V_Href->{dumpOutput} = catfile($dumpOutDir, "$output_prefix.$tag.contacts.txt.gz");
     open (CNTC, Try_GZ_Write($V_Href->{dumpOutput})) || die "cannot write contacts file: $!\n";
-    print CNTC $output_header;
+    print CNTC $V_Href->{dumpHeader};
     print CNTC join("\t", '#hap_i:chr_i', 'chrBinIdx_i', "wgBinIdx_i", 'hap_j:chr_j', 'chrBinIdx_j', "wgBinIdx_j", "contacts\n");
+    my @chr_Href = sort { $a->{turn} <=> $b->{turn} } values %{$V_Href->{ChrThings}};
     for my $chr_i_Href (@chr_Href){
         my $chr_i = $chr_i_Href->{chr};
         next unless exists $V_Href->{phasePEcontact}->{$chr_i};

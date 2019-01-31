@@ -25,8 +25,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::RunFunc';
 #----- version --------
-$VERSION = "0.51";
-$DATE = '2018-11-14';
+$VERSION = "0.52";
+$DATE = '2019-01-31';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -129,10 +129,9 @@ sub return_HELP_INFO{
         haplo_div      $V_Href->{func}->{haplo_div }->{descp}
 
      -- Extensions
-        juicer_db      $V_Href->{func}->{juicer_db}->{descp}
+        juicer_db      $V_Href->{func}->{juicer_db }->{descp}
         run_juicer     $V_Href->{func}->{run_juicer}->{descp}
-        dump_BP        $V_Href->{func}->{dump_BP   }->{descp}
-        dump_FRAG      $V_Href->{func}->{dump_FRAG }->{descp}
+        juicerDump     $V_Href->{func}->{juicerDump}->{descp}
         FRAG_gene      $V_Href->{func}->{FRAG_gene }->{descp}
 
      Version:

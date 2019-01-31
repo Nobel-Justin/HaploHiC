@@ -20,8 +20,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::Check';
 #----- version --------
-$VERSION = "0.01";
-$DATE = '2018-11-01';
+$VERSION = "0.02";
+$DATE = '2019-01-31';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -39,8 +39,7 @@ sub check{
 
     # version check, this part consumes lots of vmem: use '-Xmx1m', ~1.5G; OR >9G.
     if(    $second_cmd eq 'run_juicer'
-        || $second_cmd eq 'dump_BP'
-        || $second_cmd eq 'dump_FRAG'
+        || $second_cmd eq 'juicerDump'
       ){
         check_java_version(javaPath => $V_Href->{java}, minVer => $V_Href->{java_minimum_version});
     }

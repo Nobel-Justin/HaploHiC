@@ -25,8 +25,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::Extensions::ShellForJuicer';
 #----- version --------
-$VERSION = "0.06";
-$DATE = '2018-12-04';
+$VERSION = "0.07";
+$DATE = '2019-01-31';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -395,7 +395,7 @@ sub write_shell{
     print PBS "# compress all large txt files (>100M)\n";
     print PBS "find $V_Href->{JuicerTopdir}/ -size +100M | grep '.txt\$' | while read largeTxt; do ( gzip \$largeTxt ) && ( echo compress largeTxt OK: \$largeTxt ); done\n";
 
-    # BP dump from .hic file to contacts count txt
+    # dump from .hic file to contacts count txt
     for my $hic_type ( sort keys %{$V_Href->{hic_type}} ){
         for my $count_type ( sort keys %{$V_Href->{count_type}} ){
             for my $norm_method ( sort keys %{$V_Href->{norm_method}} ){
@@ -403,13 +403,13 @@ sub write_shell{
                 for my $BP_bin_size ( sort keys %{$V_Href->{dump_bin_size_BP}} ){
                     my $info_str = "juicer dump BP hic_file: $hic_type, BP_bin_size: $BP_bin_size, count_type: $count_type, norm_method: $norm_method";
                     print PBS "\n# $info_str\n";
-                    print PBS "( perl $V_Href->{HaploHiCperlBin} dump_BP -juicer $V_Href->{juicer_dir} -topdir $V_Href->{JuicerTopdir} -db_dir $V_Href->{db_dir} -ref_v $V_Href->{ref_version} -hic_fl $hic_type -bin $BP_bin_size -ctype $count_type -norm $norm_method -gzip ) && ( echo $info_str OK )\n";
+                    print PBS "( perl $V_Href->{HaploHiCperlBin} juicerDump -dpmode BP -juicer $V_Href->{juicer_dir} -topdir $V_Href->{JuicerTopdir} -db_dir $V_Href->{db_dir} -ref_v $V_Href->{ref_version} -hic_fl $hic_type -bin $BP_bin_size -ctype $count_type -norm $norm_method) && ( echo $info_str OK )\n";
                 }
                 # FARG mode
                 for my $FRAG_bin_size ( sort keys %{$V_Href->{dump_bin_size_FRAG}} ){
                     my $info_str = "juicer dump FRAG hic_file: $hic_type, FRAG_bin_size: $FRAG_bin_size, count_type: $count_type, norm_method: $norm_method";
                     print PBS "\n# $info_str\n";
-                    print PBS "( perl $V_Href->{HaploHiCperlBin} dump_FRAG -juicer $V_Href->{juicer_dir} -topdir $V_Href->{JuicerTopdir} -db_dir $V_Href->{db_dir} -ref_v $V_Href->{ref_version} -hic_fl $hic_type -bin $FRAG_bin_size -ctype $count_type -norm $norm_method -gzip ) && ( echo $info_str OK )\n";
+                    print PBS "( perl $V_Href->{HaploHiCperlBin} juicerDump -dpmode FRAG -juicer $V_Href->{juicer_dir} -topdir $V_Href->{JuicerTopdir} -db_dir $V_Href->{db_dir} -ref_v $V_Href->{ref_version} -hic_fl $hic_type -bin $FRAG_bin_size -ctype $count_type -norm $norm_method) && ( echo $info_str OK )\n";
                 }
             }
         }

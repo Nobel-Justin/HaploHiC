@@ -8,8 +8,7 @@ use HaploHiC::LoadOn;
 # functions
 use HaploHiC::Extensions::JuicerDB;
 use HaploHiC::Extensions::ShellForJuicer;
-use HaploHiC::Extensions::JuicerDumpBP;
-use HaploHiC::Extensions::JuicerDumpFRAG;
+use HaploHiC::Extensions::JuicerDump;
 use HaploHiC::Extensions::FRAG2Gene;
 use HaploHiC::PhasedHiC::HaploDivideReads;
 
