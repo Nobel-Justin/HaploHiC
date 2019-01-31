@@ -4,12 +4,12 @@ use strict;
 use warnings;
 use Getopt::Long;
 use File::Spec::Functions qw/ catfile /;
-use BioFuse::Util::Sys qw/ trible_run_for_success /;
+use BioFuse::Util::Sys qw/ file_exist trible_run_for_success /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use HaploHiC::LoadOn;
 use HaploHiC::GetPath qw/ GetPath /;
-use HaploHiC::PhasedHiC::dumpContacts qw/ get_dumpHeader write_dumpBinLog get_contacts_idx /;
+use HaploHiC::PhasedHiC::dumpContacts qw/ get_dumpHeader load_enzyme_site_list write_dumpBinLog get_contacts_idx /;
 
 require Exporter;
 
@@ -71,6 +71,7 @@ sub return_HELP_INFO{
        # Options #
         -hic_fl [s]  prefix of '.hic' file: 'inter_30' or 'inter'. [inter_30]
         -dpmode [s]  mode of dump, 'BP' or 'FRAG'. [BP]
+        -enzyme [s]  enzyme type. <required in FRAG mode>
         -bin    [s]  bin size. [1MB]
                        1)   BP mode: 2.5MB, 1MB, 500KB, 250KB, 100KB, 50KB, 25KB, 10KB, 5KB
                        2) FRAG mode: 500, 200, 100, 50, 20, 5, 2, 1
@@ -114,16 +115,19 @@ sub Load_moduleVar_to_pubVarPool{
             [ norm_method => 'NONE' ],
             [ dumpMode => 'BP' ],
             [ dumpBinSize => '1MB' ],
+            [ enzyme_type => undef ],
 
             # output
             [ dumpHeader => undef ],
             [ dumpBinLog => 'chrBinRange.txt' ],
-            [ dumpMerged => 'InterIntraChr.merged.txt' ],
+            [ dumpMerged => 'InterIntraChr.merged.txt.gz' ],
 
             # intermediate variants
             [ hic_file => undef ],
             [ chrLenFile => undef ],
             [ juicer_tool_Jar => undef ],
+            [ enzyme_site => undef ],
+            [ chr2enzymePos => {} ],
             [ workspace_name => 'extract_matrix' ],
             [ workspace => undef ],
 
@@ -149,6 +153,7 @@ sub Get_Cmd_Options{
         "-bin:s"    => \$V_Href->{dumpBinSize},
         "-ctype:s"  => \$V_Href->{count_type},
         "-norm:s"   => \$V_Href->{norm_method},
+        "-enzyme:s" => \$V_Href->{enzyme_type},
         # help
         "-h|help"   => \$V_Href->{HELP},
         # for debug
@@ -164,6 +169,7 @@ sub para_alert{
              || !defined $V_Href->{db_dir} || !-d $V_Href->{db_dir}
              || !defined $V_Href->{ref_version}
              || !exists $V_Href->{dump_allowBinSize}->{$V_Href->{dumpMode}}->{$V_Href->{dumpBinSize}}
+             || ( $V_Href->{dumpMode} eq 'FRAG' && !defined $V_Href->{enzyme_type} )
              || !exists $V_Href->{dump_allowNormMtd}->{$V_Href->{norm_method}}
              || ( $V_Href->{hic_type} ne 'inter' && $V_Href->{hic_type} ne 'inter_30' )
              || ( $V_Href->{count_type} ne 'observed' && $V_Href->{count_type} ne 'oe' )
@@ -181,6 +187,7 @@ sub JuicerDumpWrok{
     &getPairChrDump;
 
     get_dumpHeader;
+    load_enzyme_site_list if($V_Href->{dumpMode} eq 'FRAG');
     write_dumpBinLog;
 
     &mergePairChrDump;
@@ -192,15 +199,18 @@ sub check_juicer_files{
     $V_Href->{hic_file} = GetPath(filekey => 'hic_file');
     $V_Href->{chrLenFile} = GetPath(filekey => 'chrLenFile');
     $V_Href->{juicer_tool_Jar} = GetPath(filekey => 'juicer_tool_Jar');
+    $V_Href->{enzyme_site} = GetPath(filekey => 'enzyme_site') if $V_Href->{dumpMode} eq 'FRAG';
     # check existence
-    if(    !-e $V_Href->{hic_file}
-        || !-e $V_Href->{chrLenFile}
-        || !-e $V_Href->{juicer_tool_Jar}
+    if(    !file_exist(filePath => $V_Href->{hic_file})
+        || !file_exist(filePath => $V_Href->{chrLenFile})
+        || !file_exist(filePath => $V_Href->{juicer_tool_Jar})
+        || ($V_Href->{dumpMode} eq 'FRAG' && !file_exist(filePath => $V_Href->{enzyme_site}))
     ){
         warn "Please make sure the existence of files below.\n";
         warn "  $V_Href->{hic_file}\n";
         warn "  $V_Href->{chrLenFile}\n";
         warn "  $V_Href->{juicer_tool_Jar}\n";
+        warn "  $V_Href->{enzyme_site}\n" if $V_Href->{dumpMode} eq 'FRAG';
         exit;
     }
 

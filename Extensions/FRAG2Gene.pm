@@ -210,7 +210,7 @@ sub DumpFRAGtoGeneLevel{
     ## output gene/region-to-gene/region contacts
     &FRAG2gene_contact;
 
-    # output gene/region's enzyme FARG information
+    # output gene/region's enzyme FRAG information
     &report_GeneOrUserReg_FRAGidx;
 }
 

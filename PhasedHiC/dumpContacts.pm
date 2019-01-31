@@ -6,7 +6,7 @@ use Data::Dumper;
 use File::Spec::Functions qw/ catfile /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::Array qw/ binarySearch /;
-use BioFuse::Util::GZfile qw/ Try_GZ_Write /;
+use BioFuse::Util::GZfile qw/ Try_GZ_Write Try_GZ_Read /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ load_phasedPE_contacts phasePE_contacts_to_count /;
@@ -97,7 +97,7 @@ sub dump_contacts{
 #--- load enzyme site position list ---
 sub load_enzyme_site_list{
     # read gene-psl file
-    open (EMLIST, Try_GZ_Read($V_Href->{enzyme_site})) || die "fail read  enzyme sitelist: $!\n";
+    open (EMLIST, Try_GZ_Read($V_Href->{enzyme_site})) || die "fail read enzyme site list: $!\n";
     while(<EMLIST>){
         next if(/^#/);
         my @info = split;

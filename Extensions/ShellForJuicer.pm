@@ -405,11 +405,11 @@ sub write_shell{
                     print PBS "\n# $info_str\n";
                     print PBS "( perl $V_Href->{HaploHiCperlBin} juicerDump -dpmode BP -juicer $V_Href->{juicer_dir} -topdir $V_Href->{JuicerTopdir} -db_dir $V_Href->{db_dir} -ref_v $V_Href->{ref_version} -hic_fl $hic_type -bin $BP_bin_size -ctype $count_type -norm $norm_method) && ( echo $info_str OK )\n";
                 }
-                # FARG mode
+                # FRAG mode
                 for my $FRAG_bin_size ( sort keys %{$V_Href->{dump_bin_size_FRAG}} ){
                     my $info_str = "juicer dump FRAG hic_file: $hic_type, FRAG_bin_size: $FRAG_bin_size, count_type: $count_type, norm_method: $norm_method";
                     print PBS "\n# $info_str\n";
-                    print PBS "( perl $V_Href->{HaploHiCperlBin} juicerDump -dpmode FRAG -juicer $V_Href->{juicer_dir} -topdir $V_Href->{JuicerTopdir} -db_dir $V_Href->{db_dir} -ref_v $V_Href->{ref_version} -hic_fl $hic_type -bin $FRAG_bin_size -ctype $count_type -norm $norm_method) && ( echo $info_str OK )\n";
+                    print PBS "( perl $V_Href->{HaploHiCperlBin} juicerDump -dpmode FRAG -enzyme $V_Href->{enzyme_type} -juicer $V_Href->{juicer_dir} -topdir $V_Href->{JuicerTopdir} -db_dir $V_Href->{db_dir} -ref_v $V_Href->{ref_version} -hic_fl $hic_type -bin $FRAG_bin_size -ctype $count_type -norm $norm_method) && ( echo $info_str OK )\n";
                 }
             }
         }
