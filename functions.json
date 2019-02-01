@@ -38,5 +38,13 @@
       "module" : "HaploHiC::Extensions::JuicerDB",
       "descp" : "make database files for juicer and HaploHiC operations.",
       "main_func" : "JuicerMakeDBwork"
+   },
+   "adjustDump" : {
+      "mode_NO" : 7,
+      "_group" : "-",
+      "_comments" : "adjust HaploHiC dump contacts based on juicer dump contacts.",
+      "module" : "HaploHiC::PhasedHiC::adjustDumpContacts",
+      "descp" : "adjust HaploHiC dump contacts based on juicer dump contacts.",
+      "main_func" : "adjustDumpContacts"
    }
 }

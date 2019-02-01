@@ -71,6 +71,23 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 - phasePE_contacts_to_count
 - get_rOBpair_HapLinkCount
 
+## PhasedHiC/adjustDumpContacts.pm
+### HaploHiC::PhasedHiC::adjustDumpContacts
+### VERSION = "0.01"
+- return_HELP_INFO
+- Load_moduleVar_to_pubVarPool
+- Get_Cmd_Options
+- para_alert
+- adjustDumpContacts
+- check_header
+- prepare_fh
+- compare_chrPair
+- adjustHaploHiCdump
+- loadJuicerDPtoAdjust
+- dealJuicerDPinfo
+- dealHaploHiCRemainDP
+- dealJuicerRemainDP
+
 ## PhasedHiC/mergeHaploReads.pm
 ### HaploHiC::PhasedHiC::mergeHaploReads
 ### VERSION = "0.03"
@@ -163,7 +180,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## RunFunc.pm
 ### HaploHiC::RunFunc
-### VERSION = "0.52"
+### VERSION = "0.53"
 - options_alert_and_run
 - func_run
 - load_functions

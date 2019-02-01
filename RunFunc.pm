@@ -25,8 +25,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::RunFunc';
 #----- version --------
-$VERSION = "0.52";
-$DATE = '2019-01-31';
+$VERSION = "0.53";
+$DATE = '2019-02-02';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -127,6 +127,7 @@ sub return_HELP_INFO{
 
      -- Haplotype work
         haplo_div      $V_Href->{func}->{haplo_div }->{descp}
+        adjustDump     $V_Href->{func}->{adjustDump}->{descp}
 
      -- Extensions
         juicer_db      $V_Href->{func}->{juicer_db }->{descp}
