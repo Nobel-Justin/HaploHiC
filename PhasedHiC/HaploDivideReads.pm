@@ -370,7 +370,7 @@ sub para_alert{
             );
 }
 
-#--- run juicer_tools dump func in FRAG mode and merge all chromosomes ---
+#--- assign Hi-C pair with haplotype-unknown reads to intra/inter-haplotype ---
 sub DivideHiCreadsToHaplotypes{
 
     # basic
