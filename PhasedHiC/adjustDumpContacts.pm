@@ -149,7 +149,7 @@ sub check_header{
         while(<DP>){
             last if $. >= 10;
             # record header
-            $V_Href->{dumpContactHeader}->{$tool} .= $_ if /^##/;
+            $V_Href->{dumpContactHeader}->{$tool} .= $_ if /^#/;
             # attributes
             ## dumpMode: BP, dumpBinSize: 1000000
             if(/dumpMode:\s*(\S+),\s*dumpBinSize:\s*(\S+)/){
@@ -184,19 +184,18 @@ sub prepare_fh{
     # input: juicer dump
     open ($V_Href->{dumpContactFH}->{Juicer},   Try_GZ_Read($V_Href->{dumpContact}->{Juicer}))   || die "fail read Juicer dumpContact: $!\n";
 
-    my $date = `date`;
     # output: HaploHiC dump adjusted
     $V_Href->{dumpContact}->{HaploHiC_A} = $V_Href->{dumpContact}->{HaploHiC} . ".adjustWithJuicer.gz";
     open ($V_Href->{dumpContactFH}->{HaploHiC_A}, Try_GZ_Write($V_Href->{dumpContact}->{HaploHiC_A})) || die "fail write adjustWithJuicer: $!\n";
-    print {$V_Href->{dumpContactFH}->{HaploHiC_A}} $V_Href->{dumpContactHeader}->{HaploHiC} . '##' . $date;
+    print {$V_Href->{dumpContactFH}->{HaploHiC_A}} $V_Href->{dumpContactHeader}->{HaploHiC};
     # output: HaploHiC dump unique
     $V_Href->{dumpContact}->{HaploHiC_U} = $V_Href->{dumpContact}->{HaploHiC} . ".adjustWithJuicer.HaploHiC_unique.gz";
     open ($V_Href->{dumpContactFH}->{HaploHiC_U}, Try_GZ_Write($V_Href->{dumpContact}->{HaploHiC_U})) || die "fail write adjustWithJuicer.HaploHiC_unique: $!\n";
-    print {$V_Href->{dumpContactFH}->{HaploHiC_U}} $V_Href->{dumpContactHeader}->{HaploHiC} . '##' . $date;
+    print {$V_Href->{dumpContactFH}->{HaploHiC_U}} $V_Href->{dumpContactHeader}->{HaploHiC};
     # output: juicer dump unique
     $V_Href->{dumpContact}->{Juicer_U}   = $V_Href->{dumpContact}->{HaploHiC} . ".adjustWithJuicer.Juicer_unique.gz";
     open ($V_Href->{dumpContactFH}->{Juicer_U}, Try_GZ_Write($V_Href->{dumpContact}->{Juicer_U})) || die "fail write adjustWithJuicer.Juicer_unique: $!\n";
-    print {$V_Href->{dumpContactFH}->{Juicer_U}} $V_Href->{dumpContactHeader}->{Juicer} . '##' . $date;
+    print {$V_Href->{dumpContactFH}->{Juicer_U}} $V_Href->{dumpContactHeader}->{Juicer};
 }
 
 #--- compare chr pair between two dump contact ---
