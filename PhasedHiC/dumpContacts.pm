@@ -137,6 +137,7 @@ sub get_contacts_idx{
 #--- prepare header of dump file ---
 sub get_dumpHeader{
     $V_Href->{dumpHeader}  = "##dumpMode: $V_Href->{dumpMode}, dumpBinSize: $V_Href->{dumpBinSize}\n";
+    $V_Href->{dumpHeader} .= "##normMethod: $V_Href->{norm_method}\n";
     $V_Href->{dumpHeader} .= "##enzyme: $V_Href->{enzyme_type}\n"    if $V_Href->{dumpMode} eq 'FRAG';
     $V_Href->{dumpHeader} .= "##haploCount: $V_Href->{haploCount}\n" if $V_Href->{haploCount};
     $V_Href->{dumpHeader} .= "##".`date`;

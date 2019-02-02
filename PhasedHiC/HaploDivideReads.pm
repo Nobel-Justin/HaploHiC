@@ -218,6 +218,7 @@ sub Load_moduleVar_to_pubVarPool{
             ## dump contacts
             [ dumpMode => 'BP' ],
             [ dumpBinSize => '1MB' ],
+            [ norm_method => 'NONE' ],
             [ dumpPEdetails => {} ], # record PE-map info and for de-dup, similar to 'phasePEdetails'
             [ dumpPEcontact => {} ], # just record counts from 'dumpPEdetails' hash, similar to 'phasePEcontact'
             [ dumpSubDir => 'dumpContacts' ],

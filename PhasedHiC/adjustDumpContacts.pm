@@ -156,6 +156,9 @@ sub check_header{
                 $dumpAttr{dumpMode}{$tool} = $1;
                 $dumpAttr{dumpBinSize}{$tool} = $2;
             }
+            if(/normMethod:\s*(\S+)/){
+                $dumpAttr{normMethod}{$tool} = $1;
+            }
             if(/enzyme:\s*(\S+)/){
                 $dumpAttr{enzyme}{$tool} = $1;
             }
@@ -166,6 +169,7 @@ sub check_header{
     # compare dump-attributes
     if(    $dumpAttr{dumpMode}{HaploHiC}     ne $dumpAttr{dumpMode}{Juicer}
         || $dumpAttr{dumpBinSize}{HaploHiC}  ne $dumpAttr{dumpBinSize}{Juicer}
+        || $dumpAttr{normMethod}{HaploHiC}   ne $dumpAttr{normMethod}{Juicer}
         || (   $dumpAttr{dumpMode}{HaploHiC} eq 'FRAG'
             && $dumpAttr{enzyme}{HaploHiC}   ne $dumpAttr{enzyme}{Juicer}
            )
