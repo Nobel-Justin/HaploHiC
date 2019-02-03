@@ -65,10 +65,11 @@ sub return_HELP_INFO{
        # Inputs and Outputs #
         -phsvcf  [s]  phased sorted VCF file. <required>
         -outdir  [s]  folder to store results and temporary files. <required>
-        -bamlist [s]  list of paired SE bam files. <required>
+        -bamlist [s]  file path list of paired SE bam or sortN PE bam. <required>
                        Note: 1) PE Hi-C reads are always aligned seperatedly.
                              2) list multiple runs, one row one run.
-                             3) instance of run_c: run_c_R1.bam,run_c_R2.bam
+                             3) instance run_c: run_c_R1.bam,run_c_R2.bam
+                             4) instance run_k: run_k.sortN.bam
 
        # Tools and Database #
         -samt    [s]  SAMtools. <required>
@@ -82,7 +83,8 @@ sub return_HELP_INFO{
         -use_indel    use phased InDels. [disabled]
         -min_idd [i]  minimum distance to accept adjacent indels. [5]
         -fork    [i]  to run operations with N forks in parallel. [1]
-                       Note: more forks consume more memory.
+                       Note: 1) more forks, more memory consumed.
+                             2) maximum is the number of paired bam files input.
         -st_step [i]  start wrokflow from certain step. [1]
         -ed_step [i]  stop workflow at certain step. [$V_Href->{totalStepNO}]
                        Note: step-NO. list:  1: splitBam;   2: sEndUKtoHap;  3: dEndUKtoHap; 
@@ -166,7 +168,7 @@ sub Load_moduleVar_to_pubVarPool{
             [ phased_vcf => undef ],
             [ outdir => undef ],
             [ PairBamList => undef ],
-            [ PairSourceBam => [] ],
+            [ SourceBam => [] ],
 
             # software and database
             [ samtools => undef ],
@@ -294,7 +296,7 @@ sub Get_Cmd_Options{
         "-phsvcf:s" => \$V_Href->{phased_vcf},
         "-outdir:s" => \$V_Href->{outdir},
         "-bamlist:s"=> \$V_Href->{PairBamList},
-        "-bam:s"    => \@{$V_Href->{PairSourceBam}}, # hidden option
+        "-bam:s"    => \@{$V_Href->{SourceBam}}, # hidden option
         # tools and datbase
         "-samt:s"   => \$V_Href->{samtools},
         "-db_dir:s" => \$V_Href->{db_dir},
@@ -350,7 +352,7 @@ sub para_alert{
              || !defined $V_Href->{samtools} || !-e $V_Href->{samtools}
              || !defined $V_Href->{db_dir}   || !-d $V_Href->{db_dir}
              || !defined $V_Href->{ref_version}
-             || ( !file_exist(filePath=>$V_Href->{PairBamList}) && scalar(@{$V_Href->{PairSourceBam}}) == 0 )
+             || ( !file_exist(filePath=>$V_Href->{PairBamList}) && scalar(@{$V_Href->{SourceBam}}) == 0 )
              || !defined $V_Href->{enzyme_type}
              || $V_Href->{haploCount} < 2
              || ( $V_Href->{baseQ_offset} != 33 && $V_Href->{baseQ_offset} != 64 )
@@ -428,27 +430,30 @@ sub check_files{
     if(file_exist(filePath=>$V_Href->{PairBamList})){
       open (BAMLIST, Try_GZ_Read($V_Href->{PairBamList})) || die "fail reading PairBamList: $!\n";
       while(<BAMLIST>){
+        next if /^#/;
         chomp;
-        push @{$V_Href->{PairSourceBam}}, $_;
+        push @{$V_Href->{SourceBam}}, $_;
       }
       close BAMLIST;
     }
     ## record pair-se-bam
     my %preBamFiles;
-    for my $PairSourceBam (@{$V_Href->{PairSourceBam}}){
-        if ($PairSourceBam =~ /^([^,]+R1[^,]*\.bam),([^,]+R2[^,]*\.bam)$/){
+    for my $SourceBam (@{$V_Href->{SourceBam}}){
+        if ($SourceBam =~ /^([^,]+R1[^,]*\.bam),([^,]+R2[^,]*\.bam)$/){
             my ($R1_bam_path, $R2_bam_path) = ($1, $2);
+            # check existence
             if(    !file_exist(filePath=>$R1_bam_path)
                 || !file_exist(filePath=>$R2_bam_path)
             ){
-                warn_and_exit "<ERROR>\tbam file does not existfrom input:\n"
-                                    ."\t$PairSourceBam\n";
+                warn_and_exit "<ERROR>\tbam file does not exist:\n"
+                                    ."\t$SourceBam\n";
             }
+            # check duplicated input
             if(    exists $preBamFiles{$R1_bam_path}
                 || exists $preBamFiles{$R2_bam_path}
             ){
                 warn_and_exit "<ERROR>\tencounter same bam file again from input:\n"
-                                    ."\t$PairSourceBam\n";
+                                    ."\t$SourceBam\n";
             }
             # prepare output prefix
             ( my $R1_bam_prefix = basename($R1_bam_path) ) =~ s/[\.\_]R1.*\.bam$//;
@@ -458,7 +463,7 @@ sub check_files{
                 || exists $preBamFiles{$R1_bam_prefix}
             ){
                 warn_and_exit "<ERROR>\trequires valid prefix of bam files from input:\n"
-                                    ."\t$PairSourceBam\n";
+                                    ."\t$SourceBam\n";
             }
             # bam object
             my $R1_bam = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $R1_bam_path, tag => $R1_bam_prefix);
@@ -468,9 +473,37 @@ sub check_files{
             push @{$V_Href->{PairBamFiles}}, {R1_bam => $R1_bam, R2_bam => $R2_bam, prefix => $R1_bam_prefix, no => $i};
             $preBamFiles{$_} = 1 for ( $R1_bam_path, $R2_bam_path, $R1_bam_prefix );
         }
-        else{
+        elsif(   $SourceBam =~ /R1/ || $SourceBam =~ /_1/
+              || $SourceBam =~ /R2/ || $SourceBam =~ /_2/
+        ){  # potentially avoid that one line has only one SE bam
             warn_and_exit "<ERROR>\tcannot recognize R1/R2.bam files from input:\n"
-                                ."\t$PairSourceBam\n";
+                                ."\t$SourceBam\n";
+        }
+        else{
+            # check existence
+            if(!file_exist(filePath=>$SourceBam)){
+                warn_and_exit "<ERROR>\tbam file does not exist:\n"
+                                    ."\t$SourceBam\n";
+            }
+            # check duplicated input
+            if(exists $preBamFiles{$SourceBam}){
+                warn_and_exit "<ERROR>\tencounter same bam file again:\n"
+                                    ."\t$SourceBam\n";
+            }
+            # prepare output prefix
+            ( my $bam_prefix = basename($SourceBam) ) =~ s/\.bam$//;
+            if(    length($bam_prefix) == 0
+                || exists $preBamFiles{$bam_prefix}
+            ){
+                warn_and_exit "<ERROR>\trequires valid prefix of bam files:\n"
+                                    ."\t$SourceBam\n";
+            }
+            # bam object
+            my $PE_bam = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $SourceBam, tag => $bam_prefix);
+            # records
+            my $i = scalar @{$V_Href->{PairBamFiles}};
+            push @{$V_Href->{PairBamFiles}}, {PE_bam => $PE_bam, prefix => $bam_prefix, no => $i};
+            $preBamFiles{$_} = 1 for ( $SourceBam, $bam_prefix );
         }
     }
 

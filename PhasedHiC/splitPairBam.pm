@@ -161,8 +161,14 @@ sub sourceToSplitBam{
     ## FLAG: 0x100(sd), 0x400(d), 0x800(sp)
     ## WEDO: -F 0x400(d), as 'sd' and 'sp' alignments is important in HiC
     my %SourBamFH;
-    $SourBamFH{1} = $pairBamHref->{R1_bam}->start_read(samtools => $V_Href->{samtools}, viewOpt => '-F 0x400');
-    $SourBamFH{2} = $pairBamHref->{R2_bam}->start_read(samtools => $V_Href->{samtools}, viewOpt => '-F 0x400');
+    if(exists $pairBamHref->{R1_bam}){
+        $SourBamFH{1} = $pairBamHref->{R1_bam}->start_read(samtools => $V_Href->{samtools}, viewOpt => '-F 0x400');
+        $SourBamFH{2} = $pairBamHref->{R2_bam}->start_read(samtools => $V_Href->{samtools}, viewOpt => '-F 0x400');
+    }
+    else{
+        $SourBamFH{1} = $pairBamHref->{PE_bam}->start_read(samtools => $V_Href->{samtools}, viewOpt => '-F 0x400 -f 0x40');
+        $SourBamFH{2} = $pairBamHref->{PE_bam}->start_read(samtools => $V_Href->{samtools}, viewOpt => '-F 0x400 -f 0x80');
+    }
     while(1){
         # load rOB from source bam
         my $fileEnd = &loadrOBfromSourceBam(SourBamFH_Hf => \%SourBamFH, rBuff_Hf => \%rOBbuff);
@@ -197,14 +203,14 @@ sub startWriteSplitBam{
     my $pairBamHref = $parm{pairBamHref};
 
     # prepare SAM-header
-    my $R1_bam = $pairBamHref->{R1_bam};
-    my $HeadStr = join('', grep {/^\@SQ/ || /^\@RG/} @{ $R1_bam->get_SAMheader(samtools => $V_Href->{samtools}) });
+    my $bam = $pairBamHref->{R1_bam} || $pairBamHref->{PE_bam};
+    my $HeadStr = join('', grep {/^\@SQ/ || /^\@RG/} @{ $bam->get_SAMheader(samtools => $V_Href->{samtools}) });
     ## more in PG info
     my $PG_info  = "\@PG\tID:$MODULE_NAME\tPN:haplo_div\tVN:$VERSION\tCL:$V_Href->{MainName} haplo_div";
        # $PG_info .= " -sampid $V_Href->{sampleID}";
        $PG_info .= " -phsvcf $V_Href->{phased_vcf}";
        $PG_info .= " -outdir $V_Href->{outdir}";
-       $PG_info .= " -bam $_" for @{$V_Href->{PairSourceBam}};
+       $PG_info .= " -bam $_" for @{$V_Href->{SourceBam}};
        $PG_info .= " -samt $V_Href->{samtools}";
        $PG_info .= " -db_dir $V_Href->{db_dir}";
        $PG_info .= " -ref_v $V_Href->{ref_version}";
