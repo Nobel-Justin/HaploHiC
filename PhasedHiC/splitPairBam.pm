@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.18";
-$DATE = '2018-12-31';
+$VERSION = "0.19";
+$DATE = '2018-02-03';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -392,7 +392,8 @@ sub judge_on_rEnd{
                 || ($alignJudge =~ /SP,/ && !$V_Href->{use_spmap}) # Supplementary alignment, if donot want
                 || ($alignJudge =~ /MM,/ && !$V_Href->{use_multmap}) # Multiple-Mapped, if donot want
             ){
-                last;
+                # last;
+                next;
             }
             # if good, check haplotype covered of this alignment
             ## get phased Mut(s) this reads covers
@@ -535,45 +536,67 @@ sub judge_on_PE{
     # t5 #
     #----#
     ## t5, has unmap, one or both
-    if(    $rEndJdgHref->{1}->{J} =~ /UM/
-        || $rEndJdgHref->{2}->{J} =~ /UM/
+    if(    $rEndJdgHref->{1}->{J} =~ /UM,/
+        || $rEndJdgHref->{2}->{J} =~ /UM,/
     ){
         $SplitBam_tag = 'discarded';
         $Split_marker = 'Unmap';
     }
-    ## t5, has multiple mapped, one or both
-    elsif(   !$V_Href->{use_multmap}
-          && (   $rEndJdgHref->{1}->{J} =~ /MM/
-              || $rEndJdgHref->{2}->{J} =~ /MM/
-             )
+    ## t5, has supplementary alignment, one or both
+    if(   !$V_Href->{use_spmap}
+       && (   $rEndJdgHref->{1}->{J} =~ /SP,/
+           || $rEndJdgHref->{2}->{J} =~ /SP,/
+          )
     ){
-        $SplitBam_tag = 'discarded';
-        $Split_marker = 'MultiMap';
-    }
-    ## t5, has Low Mapping quality, one or both
-    elsif(   $rEndJdgHref->{1}->{J} =~ /LM/
-          || $rEndJdgHref->{2}->{J} =~ /LM/
-    ){
-        $SplitBam_tag = 'discarded';
-        $Split_marker = 'LowMapQ';
+        # no needs to make primary-align
+        unless($pe_OB->tryDiscardAlign(type => 'SP')){
+            $SplitBam_tag = 'discarded';
+            $Split_marker = 'SuppleAlign';
+        }
     }
     ## t5, has secondary alignment, one or both
-    elsif(   !$V_Href->{use_sdmap}
-          && (   $rEndJdgHref->{1}->{J} =~ /SD/
-              || $rEndJdgHref->{2}->{J} =~ /SD/
-             )
+    if(   !$V_Href->{use_sdmap}
+       && (   $rEndJdgHref->{1}->{J} =~ /SD,/
+           || $rEndJdgHref->{2}->{J} =~ /SD,/
+          )
     ){
-        $SplitBam_tag = 'discarded';
-        $Split_marker = 'SecondAlign';
+        # no needs to make primary-align
+        unless($pe_OB->tryDiscardAlign(type => 'SD')){
+            $SplitBam_tag = 'discarded';
+            $Split_marker = 'SecondAlign';
+        }
     }
-    ## t5, has supplementary alignment, one or both
-    elsif(   !$V_Href->{use_spmap}
-          && (   $rEndJdgHref->{1}->{J} =~ /SP/
-              || $rEndJdgHref->{2}->{J} =~ /SP/
-             )
+    ## t5, has multiple mapped, one or both
+    if(   !$V_Href->{use_multmap}
+       && (   $rEndJdgHref->{1}->{J} =~ /MM,/
+           || $rEndJdgHref->{2}->{J} =~ /MM,/
+          )
     ){
-        $SplitBam_tag = 'discarded';
-        $Split_marker = 'SuppleAlign';
+        # see whether R1 and R2 have remained alignments after discarding MM-align
+        # if both have, do discard MM-align, and then make primary-align if lacks
+        # else, go to 't5'
+        if($pe_OB->tryDiscardAlign(type => 'MM')){
+            $pe_OB->makePrimeAlignment;
+        }
+        else{
+            $SplitBam_tag = 'discarded';
+            $Split_marker = 'MultiMap';
+        }
+    }
+    ## t5, has Low Mapping quality, one or both
+    if(   $rEndJdgHref->{1}->{J} =~ /LM,/
+       || $rEndJdgHref->{2}->{J} =~ /LM,/
+    ){
+        # see whether R1 and R2 have remained alignments after discarding LM-align
+        # if both have, do discard LM-align, and then make primary-align if lacks
+        # else, go to 't5'
+        if($pe_OB->tryDiscardAlign(type => 'LM', min_mapQ => $V_Href->{min_mapQ})){
+            $pe_OB->makePrimeAlignment;
+        }
+        else{
+            $SplitBam_tag = 'discarded';
+            $Split_marker = 'LowMapQ';
+        }
     }
     #-----------------#
     # shortcut return #
