@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
-$VERSION = "0.04";
-$DATE = '2019-01-31';
+$VERSION = "0.05";
+$DATE = '2019-02-11';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -72,17 +72,18 @@ sub dump_contacts{
     for my $tag (@tag){
         $V_Href->{phasePEcontact} = {}; # reset contact container
         for my $mergeBam (@{$tagToMergeBam{$tag}}){
-            # read phased bam
-            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&get_contacts_idx]);
-            $mergeBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
-            # inform
             my $mark = $mergeBam->get_tag;
+            # read phased bam
+            my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
+            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&get_contacts_idx, lastChrPairAf => \@lastChrPair]);
+            $mergeBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
+            # contacts to count for last chr-pair, release memory
+            ## here, do de-dup phased reads (in single run) (optional)
+            phasePE_contacts_to_count(tag => "$mark " . join(',', @lastChrPair[0,1])) if $lastChrPair[0] ne '__NA__';
+            # inform
             stout_and_sterr "[INFO]\t".`date`
                                  ."\tload contacts from $mark bam OK.\n";
         }
-        # contacts to count
-        ## here, do de-dup phased reads (optional)
-        phasePE_contacts_to_count(tag => $tag);
         # output contacts
         &contacts_output(tag => $tag);
         # inform
