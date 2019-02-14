@@ -12,7 +12,6 @@ use BioFuse::Util::Sort qw/ sortByStrAndSubNum /;
 use BioFuse::BioInfo::Objects::HicReads_OB;
 use BioFuse::BioInfo::Objects::HicPairEnd_OB;
 use HaploHiC::LoadOn;
-use HaploHiC::PhasedHiC::phasedMutWork qw/ PosToPhasedMut /;
 
 require Exporter;
 
@@ -32,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.10";
-$DATE = '2019-01-27';
+$VERSION = "0.11";
+$DATE = '2019-02-11';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -59,13 +58,15 @@ sub phasePE_to_contactCount{
     # load reads from each bam
     for my $tag (sort keys %$tagToBamHref){
         for my $hapSplitBam (@{$tagToBamHref->{$tag}}){
+            my $mark = $hapSplitBam->get_tag;
             # read phased bam
-            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&mPosToWinIdx, onlyPha => 1]);
+            my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
+            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&mPosToWinIdx, lastChrPairAf => \@lastChrPair, onlyPha => 1]);
             $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
+            # contacts to count for last chr-pair, release memory
+            ## here, do de-dup phased reads (in single run) (optional)
+            &phasePE_contacts_to_count(tag => "$mark " . join(',', @lastChrPair[0,1])) if $lastChrPair[0] ne '__NA__';
         }
-        # contacts to count
-        ## here, do de-dup phased reads (optional)
-        &phasePE_contacts_to_count(tag => $tag);
     }
 }
 
@@ -76,8 +77,8 @@ sub load_phasedPE_contacts{
     my %parm = @_;
     my $pe_OB = $parm{pe_OB};
     my $idxFunc = $parm{idxFunc};
+    my $lastChrPairAf = $parm{lastChrPairAf};
     my $onlyPha = $parm{onlyPha} || 0; # only use phased Hi-C pair
-    # my $hapSort = $parm{hapSort} || 0; # currently, deprecated
 
     # get chr-pos ascending sorted all mapped reads_OB
     my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
@@ -102,6 +103,19 @@ sub load_phasedPE_contacts{
     $chr{a}   = $hasHaprOB[ 0]->get_mseg;
     $chr{b}   = $hasHaprOB[-1]->get_mseg;
     return if(!exists $V_Href->{ChrThings}->{$chr{a}} || !exists $V_Href->{ChrThings}->{$chr{b}});
+    # if new chr-pair, do contacts_to_count on former chr-pair
+    if(    $chr{a} ne $lastChrPairAf->[0]
+        || $chr{b} ne $lastChrPairAf->[1]
+    ){
+        # contacts to count for last chr-pair, release memory
+        ## here, do de-dup phased reads (in single run) (optional)
+        my $tag = "$lastChrPairAf->[2] " . join(',', @$lastChrPairAf[0,1]);
+        &phasePE_contacts_to_count(tag => $tag) if $lastChrPairAf->[0] ne '__NA__';
+        # update
+        $lastChrPairAf->[0] = $chr{a};
+        $lastChrPairAf->[1] = $chr{b};
+    }
+    # go on recording
     $pIdx{a}  = &{$idxFunc}(chr => $chr{a}, pos => $hasHaprOB[ 0]->get_mpos);
     $pIdx{b}  = &{$idxFunc}(chr => $chr{b}, pos => $hasHaprOB[-1]->get_mpos);
     $hapID{a} = $hasHaprOB[ 0]->get_SuppHaploStr;
@@ -113,13 +127,10 @@ sub load_phasedPE_contacts{
         $hapID{$i} =~ s/,.+//; # arbitrary, greedy
         $hapID{$p} =  first {$_ ne $hapID{$i}} split /,/, $hapID{$p};
     }
-    # hapID sort
-    my ($k1,$k2) = qw/ a b /;
-    # ($k1,$k2) = sort {$hapID{$a} cmp $hapID{$b}} ($k1,$k2) if ($hapSort && $hapID{a} ne $hapID{b}); # deprecated
     # get PE-Info string
     my $peInfoStr = join(';', map {( join(',', $_->get_mseg, $_->get_mpos) )} @$rOB_sortAref);
     # record, 'peInfoStr' as key, 'accumulated count' as value
-    $V_Href->{phasePEdetails}->{$chr{$k1}}->{$chr{$k2}}->{$pIdx{$k1}}->{$pIdx{$k2}}->{"$hapID{$k1},$hapID{$k2}"}->{$peInfoStr} ++;
+    $V_Href->{phasePEdetails}->{$chr{a}}->{$chr{b}}->{$pIdx{a}}->{$pIdx{b}}->{"$hapID{a},$hapID{b}"}->{$peInfoStr} ++;
 }
 
 #--- get window index of mapping position ---
@@ -138,6 +149,7 @@ sub phasePE_contacts_to_count{
     my %parm = @_;
     my $tag = $parm{tag};
 
+    my $deDupCount = 0;
     for my $chr_a (sort keys %{$V_Href->{phasePEdetails}}){
         for my $chr_b (sort keys %{$V_Href->{phasePEdetails}->{$chr_a}}){
             for my $pIdx_a (sort {$a<=>$b} keys %{$V_Href->{phasePEdetails}->{$chr_a}->{$chr_b}}){
@@ -146,11 +158,15 @@ sub phasePE_contacts_to_count{
                     for my $hapComb (sort keys %$hapCombHf){
                         if( $V_Href->{SkipDeDupPhasedReads} ){
                             # count all PE
-                            $V_Href->{phasePEcontact}->{$chr_a}->{$chr_b}->{$pIdx_a}->{$pIdx_b}->{$hapComb} += $_ for values %{$hapCombHf->{$hapComb}};
+                            my $count = sum( values  %{$hapCombHf->{$hapComb}} );
+                            $deDupCount += $count;
+                            $V_Href->{phasePEcontact}->{$chr_a}->{$chr_b}->{$pIdx_a}->{$pIdx_b}->{$hapComb} += $count;
                         }
                         else{
                             # count all PE de-redundancy by 'peInfo'
-                            $V_Href->{phasePEcontact}->{$chr_a}->{$chr_b}->{$pIdx_a}->{$pIdx_b}->{$hapComb} += scalar( keys %{$hapCombHf->{$hapComb}} );
+                            my $count = scalar( keys %{$hapCombHf->{$hapComb}} );
+                            $deDupCount += $count;
+                            $V_Href->{phasePEcontact}->{$chr_a}->{$chr_b}->{$pIdx_a}->{$pIdx_b}->{$hapComb} += $count;
                         }
                     }
                 }
@@ -164,8 +180,9 @@ sub phasePE_contacts_to_count{
     # finally release
     $V_Href->{phasePEdetails} = {};
     # inform
+    my $action = $V_Href->{SkipDeDupPhasedReads} ? 'Load' : 'De-dup';
     stout_and_sterr "[INFO]\t".`date`
-                         ."\tDe-dup $tag phased PE-reads OK.\n" unless $V_Href->{SkipDeDupPhasedReads};
+                         ."\t$action $tag phased PE-reads and get $deDupCount contacts OK.\n";
 }
 
 #--- return haplo link count of given reads_OB pair ---
@@ -210,7 +227,6 @@ sub get_rOBpair_HapLinkCount{
     my %winTag = map {($_, "$mSeg{$_},w$winIdx{$_}")} qw/a b/;
     if(exists $HapLinkHf->{link}->{$winTag{a}}){
         if(exists $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}}){
-            # stout_and_sterr "quick find HapLink for $winTag{a},$mPos{a}-$mExp{a} $winTag{b},$mPos{b}-$mExp{b}\n"; # debug
             $HapLinkHf->{stat}->{QuickFind} ++;
             return @{ $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} };
         }
@@ -220,64 +236,94 @@ sub get_rOBpair_HapLinkCount{
     }
     # iteratively find sufficient phased Het-Mut in local flank region
     my $chrHapLinkHref = $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}};
-    my %fReg = map { ($_, {pos=>{},mct=>{}}) } keys %rOB;
-    for my $ext_ratio ( @{$V_Href->{UKreadsFlankRegUnitTimesAf}} ){
-        my $FlankSize  = $ext_ratio * $V_Href->{UKreadsFlankRegUnit};
-        my $PhaHetMutC = $ext_ratio * $V_Href->{UKreadsMaxPhasedHetMut};
-        for my $s (sort keys %rOB){
-            # extract phased Het-Mut in 5/3 prime flanking region
-            my $mSegLen = $V_Href->{ChrThings}->{$mSeg{$s}}->{len};
-            my $FlankSize_p5 = max($mPos{$s}-$FlankSize, 1       ) - $mPos{$s}; # negative value
-            my $FlankSize_p3 = min($mExp{$s}+$FlankSize, $mSegLen) - $mExp{$s}; # positive value
-            my $phMutOB_p5_Aref = PosToPhasedMut( chr => $mSeg{$s}, pos => $mPos{$s}, ext => $FlankSize_p5 );
-            my $phMutOB_p3_Aref = PosToPhasedMut( chr => $mSeg{$s}, pos => $mExp{$s}, ext => $FlankSize_p3 );
-            # adjust phased Het-Mut count, if set
-            my $phMutOB_p5_C = scalar(@$phMutOB_p5_Aref);
-            my $phMutOB_p3_C = scalar(@$phMutOB_p3_Aref);
-            if( $PhaHetMutC ){
-                if( $phMutOB_p5_C > $PhaHetMutC ){
-                    @{$phMutOB_p5_Aref} = @{$phMutOB_p5_Aref}[ -1*$PhaHetMutC .. -1 ];
-                    $phMutOB_p5_C = $PhaHetMutC;
-                }
-                if( $phMutOB_p3_C > $PhaHetMutC ){
-                    @{$phMutOB_p3_Aref} = @{$phMutOB_p3_Aref}[ 0 .. $PhaHetMutC-1 ];
-                    $phMutOB_p3_C = $PhaHetMutC;
-                }
+    my %fReg = map { ($_, {pos=>{}}) } keys %rOB;
+    my @FlankSizeTime = (1, $V_Href->{UKreadsFlankRegUnitMaxTimes});
+    while(1){
+        # stout_and_sterr "FlankSizeTime: @FlankSizeTime\n"; # debug
+        my $time = int(sum(@FlankSizeTime)/2);
+        my $FlankSize;
+        my @judgement;
+        for my $shift (-1, 0){
+            $FlankSize = $V_Href->{UKreadsFlankRegUnit} * ($time + $shift);
+            for my $s (sort keys %rOB){
+                # extract phased Het-Mut in 5/3 prime flanking region
+                my $mSegLen = $V_Href->{ChrThings}->{$mSeg{$s}}->{len};
+                my $FlankSize_p5 = max($mPos{$s}-$FlankSize, 1       ) - $mPos{$s}; # negative value
+                my $FlankSize_p3 = min($mExp{$s}+$FlankSize, $mSegLen) - $mExp{$s}; # positive value
+                # record
+                $fReg{$s}{pos}{p5} = $mPos{$s} + $FlankSize_p5;
+                $fReg{$s}{pos}{p3} = $mExp{$s} + $FlankSize_p3;
             }
-            # record
-            $fReg{$s}{mct}{p5} = $phMutOB_p5_C;
-            $fReg{$s}{mct}{p3} = $phMutOB_p3_C;
-            $fReg{$s}{pos}{p5} = ( ( $PhaHetMutC && $phMutOB_p5_C == $PhaHetMutC ) ? $phMutOB_p5_Aref->[ 0]->get_pos : $mPos{$s}+$FlankSize_p5 );
-            $fReg{$s}{pos}{p3} = ( ( $PhaHetMutC && $phMutOB_p3_C == $PhaHetMutC ) ? $phMutOB_p3_Aref->[-1]->get_pos : $mExp{$s}+$FlankSize_p3 );
-        }
-        # extract the haplo link of a/b paired flank regions
-        my %pIdx;
-        %{$pIdx{p5}} = map { ( $_, Pos2Idx(pos => $fReg{$_}{pos}{p5}, winSize => $V_Href->{mapPosWinSize}) ) } keys %fReg;
-        %{$pIdx{p3}} = map { ( $_, Pos2Idx(pos => $fReg{$_}{pos}{p3}, winSize => $V_Href->{mapPosWinSize}) ) } keys %fReg;
-        for my $pIdx_a ( $pIdx{p5}{a} .. $pIdx{p3}{a} ){
-            next unless exists $chrHapLinkHref->{$pIdx_a};
-            for my $pIdx_b ( $pIdx{p5}{b} .. $pIdx{p3}{b} ){
-                next unless exists $chrHapLinkHref->{$pIdx_a}->{$pIdx_b};
-                my $pIdxHapLinkHref = $chrHapLinkHref->{$pIdx_a}->{$pIdx_b};
-                $HapLinkCount{$_} += $pIdxHapLinkHref->{$_} for keys %$pIdxHapLinkHref;
+            # extract the haplo link of a/b paired flank regions
+            my %pIdx;
+            %{$pIdx{p5}} = map { ( $_, Pos2Idx(pos => $fReg{$_}{pos}{p5}, winSize => $V_Href->{mapPosWinSize}) ) } keys %fReg;
+            %{$pIdx{p3}} = map { ( $_, Pos2Idx(pos => $fReg{$_}{pos}{p3}, winSize => $V_Href->{mapPosWinSize}) ) } keys %fReg;
+            %HapLinkCount = (); # sweep
+            my $quickCheck = 0;
+            for my $pIdx_a ( $pIdx{p5}{a} .. $pIdx{p3}{a} ){
+                next unless exists $chrHapLinkHref->{$pIdx_a};
+                # intra-chr pIdx are sorted in ascending order
+                my $pIdx_b_p5 = $pIdx{p5}{b};
+                $pIdx_b_p5 = $pIdx_a if $mSeg{a} eq $mSeg{b} && $pIdx_a > $pIdx_b_p5;
+                for my $pIdx_b ( $pIdx_b_p5 .. $pIdx{p3}{b} ){
+                    next unless exists $chrHapLinkHref->{$pIdx_a}->{$pIdx_b};
+                    my $pIdxHapLinkHref = $chrHapLinkHref->{$pIdx_a}->{$pIdx_b};
+                    # only keep pre-set hapID combination
+                    ## if-else is faster than incorporate '!defined $hapRegex || ' in grep syntax
+                    if(defined $hapRegex){
+                        $HapLinkCount{$_} += $pIdxHapLinkHref->{$_} for grep /$hapRegex/, keys %$pIdxHapLinkHref;
+                    }
+                    else{
+                        $HapLinkCount{$_} += $pIdxHapLinkHref->{$_} for keys %$pIdxHapLinkHref;
+                    }
+                }
+                # enable quick check
+                $quickCheck ||= (scalar(keys %HapLinkCount) != 0) if $shift == -1 && !$quickCheck;
+                # do quick check to exits loop
+                last if $quickCheck && sum(values %HapLinkCount) >= $V_Href->{hapCombMinLinkForPhaReg};
+            }
+            # satisfy the minimum link count
+            if(    scalar(keys %HapLinkCount) != 0
+                && sum(values  %HapLinkCount) >= $V_Href->{hapCombMinLinkForPhaReg}
+            ){
+                push @judgement, 1;
+                last if $shift == -1;
+            }
+            else{
+                push @judgement, 0;
             }
         }
-        # only keep pre-set hapID combination
-        if(defined $hapRegex){
-            delete $HapLinkCount{$_} for grep !/$hapRegex/, keys %HapLinkCount;
-        }
-        # find HapLink or last time
-        my $hapCombLinkReachMin = (scalar(keys %HapLinkCount) >= $V_Href->{hapCombMinLinkForPhaReg});
-        if(    $hapCombLinkReachMin
-            || $ext_ratio == $V_Href->{UKreadsFlankRegUnitTimesAf}->[-1]
+        # go on search?
+        my $return = 0;
+        my $phased = 0;
+        if(    $judgement[0] == 0 # 0-1
+            && $judgement[1] == 1
         ){
-            my $mark = $hapCombLinkReachMin ? 'RegionPhased' : 'RegionNotPhased';
-            $mark .= ";($ext_ratio"
+            $return = 1;
+            $phased = 1;
+        }
+        else{
+            if($judgement[0] == 1){ # 1-[1], first half part
+                $FlankSizeTime[1] = $time - 1;
+            }
+            else{ # 0-0
+                $FlankSizeTime[0] = $time + 1;
+            }
+            # check region reliability
+            if($FlankSizeTime[0] > $FlankSizeTime[1]){
+                $return = 1;
+                $phased = 1 if sum(@judgement) > 0;
+            }
+        }
+        # find enough HapLink or last time
+        if($return){
+            my $mark = $phased ? 'RegionPhased' : 'RegionNotPhased';
+            $mark .= ";(fSize:$FlankSize"
                     .",$mSeg{$_}:$fReg{$_}{pos}{p5}-$fReg{$_}{pos}{p3}"
                     .",mPosWinIdx:$winIdx{$_}"
-                    .",MCT5p:$fReg{$_}{mct}{p5}"
-                    .",MCT3p:$fReg{$_}{mct}{p3})"
+                    .')'
                     for sort keys %fReg;
+            # stout_and_sterr "$mark\n"; # debug
             # record
             $HapLinkHf->{stat}->{Calculate} ++;
             $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} = [\%HapLinkCount, $mark];
