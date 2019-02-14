@@ -15,7 +15,7 @@ use BioFuse::BioInfo::Objects::HicPairEnd_OB;
 use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::PhasedHiC::dumpContacts qw/ load_enzyme_site_list /;
-use HaploHiC::PhasedHiC::phasedMutWork qw/ PosToPhasedMut release_phaseMut_OB /;
+use HaploHiC::PhasedHiC::phasedMutWork qw/ load_phased_VCF PosToPhasedMut /; # release_phaseMut_OB
 
 require Exporter;
 
@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.19";
-$DATE = '2018-02-03';
+$VERSION = "0.21";
+$DATE = '2018-02-13';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -68,6 +68,9 @@ sub divide_pairBam{
     # start from step after current step
     return if $V_Href->{stepToStart} > 1;
 
+    # phased Het-mutation
+    load_phased_VCF;
+
     # load enzyme sites list for 'invalid PE'
     load_enzyme_site_list;
 
@@ -92,6 +95,7 @@ sub divide_pairBam{
     if($fork_DO){ $pm->wait_all_children }
 
     # release memory
+    $V_Href->{PhasedMut} = undef;
     ## reload in HaploHiC::PhasedHiC::dumpContacts if need
     $V_Href->{chr2enzymePos} = undef;
 
@@ -216,6 +220,9 @@ sub startWriteSplitBam{
        $PG_info .= " -ref_v $V_Href->{ref_version}";
        $PG_info .= " -hapct $V_Href->{haploCount}";
        $PG_info .= " -use_indel" if($V_Href->{use_InDel});
+       $PG_info .= " -chr_i ".join(' -chr_i ', @{$V_Href->{mustMapChr_i}->{Af}}) if exists $V_Href->{mustMapChr_i};
+       $PG_info .= " -chr_j ".join(' -chr_j ', @{$V_Href->{mustMapChr_j}->{Af}}) if exists $V_Href->{mustMapChr_j};
+       $PG_info .= " -flt_pe" if($V_Href->{filter_pe});
        $PG_info .= " -use_sp" if($V_Href->{use_spmap});
        $PG_info .= " -use_sd" if($V_Href->{use_sdmap});
        $PG_info .= " -use_mm" if($V_Href->{use_multmap});
@@ -325,6 +332,16 @@ sub PEreads_to_splitBam{
     my $pe_OB = $parm{pe_OB};
     my $pairBamHref = $parm{pairBamHref};
 
+    # skip this pe if not match required chr-[pair]
+    if(    exists $V_Href->{mustMapChr_i}
+        || exists $V_Href->{mustMapChr_j}
+    ){
+        my @refSegHref_para;
+        push @refSegHref_para, (a_refSegHref => $V_Href->{mustMapChr_i}->{Hf}) if exists $V_Href->{mustMapChr_i};
+        push @refSegHref_para, (b_refSegHref => $V_Href->{mustMapChr_j}->{Hf}) if exists $V_Href->{mustMapChr_j};
+        return unless $pe_OB->test_pair_RefSeg(@refSegHref_para);
+    }
+
     # make judgement on each reads-end
     my %hap2phMut;
     &judge_on_rEnd(pe_OB => $pe_OB, hap2phMutHref => \%hap2phMut);
@@ -380,7 +397,7 @@ sub judge_on_rEnd{
     # judgement on each end's each alignment
     for my $rEnd (1,2){
         my $reads_OB_Aref = $pe_OB->get_reads_OB(reads_end => $rEnd);
-        for my $reads_OB ( @$reads_OB_Aref ){ # first comes the best alignment???
+        for my $reads_OB ( @$reads_OB_Aref ){
             # qulifying on alignment
             my $alignJudge = &judge_reads_alignment(reads_OB => $reads_OB);
             # record
@@ -392,7 +409,7 @@ sub judge_on_rEnd{
                 || ($alignJudge =~ /SP,/ && !$V_Href->{use_spmap}) # Supplementary alignment, if donot want
                 || ($alignJudge =~ /MM,/ && !$V_Href->{use_multmap}) # Multiple-Mapped, if donot want
             ){
-                # last;
+                last if $V_Href->{filter_pe};
                 next;
             }
             # if good, check haplotype covered of this alignment
@@ -549,7 +566,9 @@ sub judge_on_PE{
           )
     ){
         # no needs to make primary-align
-        unless($pe_OB->tryDiscardAlign(type => 'SP')){
+        if(     $V_Href->{filter_pe}
+            || !$pe_OB->tryDiscardAlign(type => 'SP')
+        ){
             $SplitBam_tag = 'discarded';
             $Split_marker = 'SuppleAlign';
         }
@@ -561,7 +580,9 @@ sub judge_on_PE{
           )
     ){
         # no needs to make primary-align
-        unless($pe_OB->tryDiscardAlign(type => 'SD')){
+        if(     $V_Href->{filter_pe}
+            || !$pe_OB->tryDiscardAlign(type => 'SD')
+        ){
             $SplitBam_tag = 'discarded';
             $Split_marker = 'SecondAlign';
         }
@@ -573,14 +594,16 @@ sub judge_on_PE{
           )
     ){
         # see whether R1 and R2 have remained alignments after discarding MM-align
-        # if both have, do discard MM-align, and then make primary-align if lacks
-        # else, go to 't5'
-        if($pe_OB->tryDiscardAlign(type => 'MM')){
-            $pe_OB->makePrimeAlignment;
-        }
-        else{
+        # if not both have, go to 't5'
+        # else, do discard MM-align, and then make primary-align if lacks
+        if(     $V_Href->{filter_pe}
+            || !$pe_OB->tryDiscardAlign(type => 'MM')
+        ){
             $SplitBam_tag = 'discarded';
             $Split_marker = 'MultiMap';
+        }
+        else{
+            $pe_OB->makePrimeAlignment;
         }
     }
     ## t5, has Low Mapping quality, one or both
@@ -588,14 +611,16 @@ sub judge_on_PE{
        || $rEndJdgHref->{2}->{J} =~ /LM,/
     ){
         # see whether R1 and R2 have remained alignments after discarding LM-align
-        # if both have, do discard LM-align, and then make primary-align if lacks
-        # else, go to 't5'
-        if($pe_OB->tryDiscardAlign(type => 'LM', min_mapQ => $V_Href->{min_mapQ})){
-            $pe_OB->makePrimeAlignment;
-        }
-        else{
+        # if not both have, go to 't5'
+        # else, do discard LM-align, and then make primary-align if lacks
+        if(     $V_Href->{filter_pe}
+            || !$pe_OB->tryDiscardAlign(type => 'LM', min_mapQ => $V_Href->{min_mapQ})
+        ){
             $SplitBam_tag = 'discarded';
             $Split_marker = 'LowMapQ';
+        }
+        else{
+            $pe_OB->makePrimeAlignment;
         }
     }
     #-----------------#
@@ -818,18 +843,24 @@ sub sortSplitBamByPEcontact{
     my $pairBamHref = $parm{pairBamHref};
     my $fork_DO = $parm{fork_DO};
 
-    # try to release memory firstly
-    if($fork_DO){ # in child-process
-        $V_Href->{PhasedMut} = undef;
-    }
-    else{ # in main-process
-        release_phaseMut_OB; # this will also do agian after this step
-    }
+    # # try to release memory firstly
+    # if($fork_DO){ # in child-process
+    #     $V_Href->{PhasedMut} = undef;
+    # }
+    # else{ # in main-process
+    #     release_phaseMut_OB; # this will also do agian after this step
+    # }
+    ## release memory
+    ## no matter in main-process or child-process
+    $V_Href->{PhasedMut} = undef;
     ## reload in HaploHiC::PhasedHiC::dumpContacts if need
     $V_Href->{chr2enzymePos} = undef;
 
+    # series of split-bam files with different tags, all contribute to contacts
     ## t1,t3: <haplo> bam of phMut (single-haplo) covered reads
-    my @tags = map {("phMut-sEnd-h$_")} (1 .. $V_Href->{haploCount});
+    my @tags = map {("phMut-dEnd-h$_" , "phMut-sEnd-h$_")} (1 .. $V_Href->{haploCount});
+    ## t2,t4: <haplo> bam of phMut (multi-haplo) covered reads
+    push @tags, "phMut-dEnd-hInter", "phMut-sEnd-hInter";
     ## t6: bam of haplo-unknown reads
     push @tags, "unknown";
 
@@ -840,6 +871,7 @@ sub sortSplitBamByPEcontact{
         `mkdir -p $sortTempDir`;
         # read $tag split bam, and write peOB to chr-pair bams
         my %chrPairBam;
+        # my $dEndSign = ($tag =~ /dEnd/ ? 1 : 0);
         my @subrtOpt = (subrtRef => \&write_peOB_to_chrPairBam,
                         subrtParmAref => [chrPairBamHf => \%chrPairBam, splitBam => $splitBam, sortTempDir => $sortTempDir]);
         $splitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, @subrtOpt);
@@ -867,8 +899,9 @@ sub write_peOB_to_chrPairBam{
     my $sortTempDir = $parm{sortTempDir};
 
     # sorted chr-pair
-    my $rOB_Af = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
-    my $chrPairTag = join('-', $rOB_Af->[0]->get_mseg, $rOB_Af->[-1]->get_mseg);
+    my @rOB = grep $splitBam->get_tag !~ /-dEnd-h/ || $_->printSAM !~ /\sXH:Z:UK\s/,
+                @{ $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') };
+    my $chrPairTag = join('-', $rOB[0]->get_mseg, $rOB[-1]->get_mseg);
     # check chr-pair bam
     unless(exists $chrPairBamHf->{$chrPairTag}){
         $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => catfile($sortTempDir, "$chrPairTag.bam"));
@@ -923,8 +956,9 @@ sub write_sort_peOB_to_newSplitBam{
     my @peCoord;
     for my $i (0 .. scalar(@$pe_OB_poolAf)-1){
         # get chr-pos ascending sorted all mapped reads_OB
-        my $rOB_Af = $pe_OB_poolAf->[$i]->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
-        push @peCoord, [$i, $rOB_Af->[0]->get_mpos, $rOB_Af->[-1]->get_mpos];
+        my @rOB = grep $splitBam->get_tag !~ /-dEnd-h/ || $_->printSAM !~ /\sXH:Z:UK\s/,
+                    @{ $pe_OB_poolAf->[$i]->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') };
+        push @peCoord, [$i, $rOB[0]->get_mpos, $rOB[-1]->get_mpos];
     }
     # sort by pos and write to new split bam
     $splitBam->write(content => join("\n",@{$pe_OB_poolAf->[$_->[0]]->printSAM(keep_all=>1)})."\n") for sort {$a->[1] <=> $b->[1] || $a->[2] <=> $b->[2]} @peCoord;
