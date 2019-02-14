@@ -10,7 +10,6 @@ use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
-use HaploHiC::PhasedHiC::phasedMutWork qw/ PosToPhasedMut /;
 use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ getTODOpairBamHrefArray prepareGetHapBamObj startWriteGetHapBam /;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount get_rOBpair_HapLinkCount /;
 
@@ -29,8 +28,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.16";
-$DATE = '2019-01-29';
+$VERSION = "0.17";
+$DATE = '2019-02-12';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
