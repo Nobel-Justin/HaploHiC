@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.06";
-$DATE = '2019-01-29';
+$VERSION = "0.07";
+$DATE = '2019-02-13';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -188,8 +188,10 @@ sub startWriteGetHapBam{
     my $PGi = first {$HeadAf->[$_] =~ /\@PG/} (0 .. scalar(@$HeadAf)-1);
     chomp($HeadAf->[$PGi]);
     $HeadAf->[$PGi] .= " -ucrfut $V_Href->{UKreadsFlankRegUnit}";
-    $HeadAf->[$PGi] .= " -ucrpha $V_Href->{UKreadsMaxPhasedHetMut}\n";
-    my $HeadStr = join('', @$HeadAf);
+    $HeadAf->[$PGi] .= " -ucrfmx $V_Href->{UKreadsFlankRegMax}";
+    $HeadAf->[$PGi] .= " -min_ct $V_Href->{hapCombMinLinkForPhaReg}";
+    # $HeadAf->[$PGi] .= " -ucrpha $V_Href->{UKreadsMaxPhasedHetMut}";
+    my $HeadStr = join('', @$HeadAf) . "\n";
 
     # getHap.bam file-handle
     my @ToInform;
@@ -302,40 +304,56 @@ sub findContactAnchor{
         }
     }
     # find proper index of hasHap_rOB and nonHap_rOB
-    my $time = 0;
-    FindAnchor: {
-        if( $hasHapIdx[-1] < $nonHapIdx[0] ){
-            return ($hasHapIdx[0], $nonHapIdx[-1]);
+    if( $hasHapIdx[-1] < $nonHapIdx[0] ){
+        return ($hasHapIdx[0], $nonHapIdx[-1]);
+    }
+    elsif( $nonHapIdx[-1] < $hasHapIdx[0] ){
+        return ($hasHapIdx[-1], $nonHapIdx[0]);
+    }
+    else{
+        my $hasHaprOB_F = $rOB_sortAref->[$hasHapIdx[0]];
+        my $hasHaprOB_L = $rOB_sortAref->[$hasHapIdx[-1]];
+        my $nonHaprOB_F = $rOB_sortAref->[$nonHapIdx[0]];
+        my $nonHaprOB_L = $rOB_sortAref->[$nonHapIdx[-1]];
+        my $hFnLsameChr = ($hasHaprOB_F->get_mseg eq $nonHaprOB_L->get_mseg);
+        my $hLnFsameChr = ($hasHaprOB_L->get_mseg eq $nonHaprOB_F->get_mseg);
+        # same chr
+        if( $hFnLsameChr && $hLnFsameChr ){
+            # larger pos gap
+            if(   abs($hasHaprOB_F->get_mpos - $nonHaprOB_L->get_mpos)
+                > abs($hasHaprOB_L->get_mpos - $nonHaprOB_F->get_mpos)
+            ){
+                return ($hasHapIdx[0], $nonHapIdx[-1]);
+            }
+            else{
+                return ($hasHapIdx[-1], $nonHapIdx[0]);
+            }
         }
-        elsif( $nonHapIdx[-1] < $hasHapIdx[0] ){
+        # diff chr (solo)
+        elsif( $hFnLsameChr && !$hLnFsameChr ){
             return ($hasHapIdx[-1], $nonHapIdx[0]);
         }
+        elsif( !$hFnLsameChr && $hLnFsameChr ){
+            return ($hasHapIdx[0], $nonHapIdx[-1]);
+        }
+        # diff chr (both)
         else{
-            my $hasHaprOB_F = $rOB_sortAref->[$hasHapIdx[0]];
-            my $hasHaprOB_L = $rOB_sortAref->[$hasHapIdx[-1]];
-            my $nonHaprOB_F = $rOB_sortAref->[$nonHapIdx[0]];
-            my $nonHaprOB_L = $rOB_sortAref->[$nonHapIdx[-1]];
-            if(    $hasHaprOB_F->get_mseg eq $nonHaprOB_L->get_mseg
-                && $hasHaprOB_L->get_mseg eq $nonHaprOB_F->get_mseg
-            ){ # same chr
-                if(   abs($hasHaprOB_F->get_mpos - $nonHaprOB_L->get_mpos)
-                    > abs($hasHaprOB_L->get_mpos - $nonHaprOB_F->get_mpos)
-                ){ # larger pos gap
-                    return ($hasHapIdx[0], $nonHapIdx[-1]);
-                }
-                else{
-                    return ($hasHapIdx[-1], $nonHapIdx[0]);
-                }
+            # longer mapped length
+            if(   $hasHaprOB_F->get_mReadLen + $nonHaprOB_L->get_mReadLen
+                > $hasHaprOB_L->get_mReadLen + $nonHaprOB_F->get_mReadLen
+            ){
+                return ($hasHapIdx[0], $nonHapIdx[-1]);
             }
-            else{ # diff chr
-                if( $nonHaprOB_F->is_suppmap ){ # avoid supp-map nonHap alignment
-                    return ($hasHapIdx[0], $nonHapIdx[-1]);
-                }
-                else{
-                    return ($hasHapIdx[-1], $nonHapIdx[0]);
-                }
+            else{
+                return ($hasHapIdx[-1], $nonHapIdx[0]);
             }
         }
+        # if( $nonHaprOB_F->is_suppmap ){ # avoid supp-map nonHap alignment, deprecated
+        #     return ($hasHapIdx[0], $nonHapIdx[-1]);
+        # }
+        # else{
+        #     return ($hasHapIdx[-1], $nonHapIdx[0]);
+        # }
     }
 }
 
