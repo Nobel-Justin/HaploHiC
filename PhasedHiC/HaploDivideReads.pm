@@ -12,7 +12,7 @@ use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::GetPath qw/ GetPath /;
 use HaploHiC::Extensions::JuicerDump qw/ load_chr_Things /;
-use HaploHiC::PhasedHiC::phasedMutWork qw/ load_phased_VCF release_phaseMut_OB /;
+# use HaploHiC::PhasedHiC::phasedMutWork qw/ load_phased_VCF release_phaseMut_OB /;
 use HaploHiC::PhasedHiC::splitPairBam qw/ divide_pairBam /;
 use HaploHiC::PhasedHiC::dEndUkHapConfirm qw/ dEndUK_get_HapLink /;
 use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ sEndhx_get_HapLink /;
@@ -34,8 +34,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.17";
-$DATE = '2019-02-03';
+$VERSION = "0.19";
+$DATE = '2019-02-13';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -50,6 +50,7 @@ my @functoion_list = qw/
                         DivideHiCreadsToHaplotypes
                         check_files
                         prepare
+                        delete_prev_results
                      /;
 
 #--- return HELP_INFO ---
@@ -60,7 +61,7 @@ sub return_HELP_INFO{
      Options:
 
        # assign Hi-C reads to paternal and maternal haplotypes via Phased-Het-Mutation (PhaHetMut).  #
-       # allocate PhaHetMut-uncovered Hi-C PE reads (PhaUcPE) based on Local Hap-Divide-Ratio (LHDR) #
+       # allocate haplotype-unknown Hi-C PE reads (HaploUKPE) based on Local Hap-Divide-Ratio (LHDR) #
 
        # Inputs and Outputs #
         -phsvcf  [s]  phased sorted VCF file. <required>
@@ -91,36 +92,27 @@ sub return_HELP_INFO{
                                              4: readsMerge; 5: dumpContacts
 
        # Options of step NO.1 #
+        -flt_pe       discard PE-reads once either read has unqualitified alignment. [disabled]
+                       Note: default to discard unqualitified alignment only.
         -use_sp       use PE-reads having supplementary alignments, suggested to enable. [disabled]
         -use_sd       use PE-reads having secondary alignments. [disabled]
         -use_mm       use multiple mapped reads. [disabled]
-        -min_mq  [i]  the minimum mapping quality. [20]
+        -min_mq  [i]  the minimum mapping quality. [30]
         -min_re  [i]  the minimum distance to bilateral reads-edges to judge one het-allele. [5]
         -min_bq  [i]  the minimum base quality to accept mut-allele on one reads. [20]
         -min_ad  [i]  the minimum distance to nearby alteration on reads to accept one het-allele. [3]
         -qual    [i]  base quality offset. [33]
-                       Note: 1) set 33 for Sanger and Illumina 1.8+.
-                             2) set 64 for Solexa, Illumina 1.3+ and 1.5+.
+                       Note: '33' for Sanger and Illumina 1.8+; '64' for Solexa, Illumina 1.3+ and 1.5+.
         -max_rd  [s]  the maximum distance to determine close alignments. [1E3]
         -use_caln     accept PE-reads whose two ends are close alignments ('-max_rd'). [disabled]
                        Note: default to put them in 'invalid PE'.
 
        # Options of step NO.2-3 #
-        -skipddp      skip de-duplication of phased reads. [disabled]
-                       ** Note: this option ('-skipddp') is also effective in step NO.5.
-        -ucrfut  [s]  the flanking region to calculate LHDR for PhaUcPE. [1E4]
-                       Note: 1) the minimum value allowed is 5E3.
-                             2) it's unilateral size, and apply it bilaterally.
-        -ucrpha  [i]  at most use such amount of flanking PhaHetMut to calculate LHDR for PhaUcPE. [5]
-                       Note: 1) set 0 to disable, i.e., only '-ucrfut' works.
-        -mpwr    [f]  ratio of '-ucrfut' to set as window size to store phased contacts. [0.1]
-                       Note: 1) the less this option is set, the more memory and cpu-time is consumed.
-                             2) available interval: (0, 0.5].
-        -min_ct  [i]  the minimum contact count from phased pairs to confirm phased local regions. [1]
-        -slbmpf  [s]  only deal with bam files with provided prefix. [all]
-                       Note: 1) still load haplotypes contacts got from all bam files.
-                             2) prefix's regex: /^(PREFIX)[\\._]R[12].*\\.bam\$/
-                             3) effective in only run at step NO.2 or NO.3.
+        -ucrfut  [s]  the unit size of unilateral local flanking region, minimum: 5E3. [1E4]
+        -ucrfmx  [s]  the maximum size of unilateral local flanking region when extends. [1E7]
+        -mpwr    [f]  ratio of '-ucrfut' to set as window size to store phased contacts. (0, [0.5]]
+                       Note: the less '-mpwr' is, the more memory and cpu-time consumed.
+        -min_ct  [i]  the minimum contact count from phased pairs to confirm phased local regions. [5]
 
        # Options of step NO.5 #
         -dpmode  [s]  mode of dump, 'BP' or 'FRAG'. [BP]
@@ -140,6 +132,14 @@ sub return_HELP_INFO{
      Author:
         $AUTHOR ($EMAIL)
  \n";
+        # -skipddp      skip de-duplication of phased reads. [disabled]
+        #                ** Note: this option ('-skipddp') is also effective in step NO.5.
+        # -ucrpha  [i]  at most use such amount of flanking PhaHetMut to calculate LHDR for HaploUKPE. [5]
+        #                Note: 1) set 0 to disable, i.e., only '-ucrfut' works.
+        # -slbmpf  [s]  only deal with bam files with provided prefix. [all]
+        #                Note: 1) still load haplotypes contacts got from all bam files.
+        #                      2) prefix's regex: /^(PREFIX)[\\._]R[12].*\\.bam\$/
+        #                      3) effective in only run at step NO.2 or NO.3.
         # -sampid  [s]  sample ID. <required>
         # -use_sgum    use pe-reads having one unmapped end. [disabled]
         # -ucrftm  [s]  allow to extend the '-ucrfut' time by time till to this times. [10]
@@ -193,10 +193,13 @@ sub Load_moduleVar_to_pubVarPool{
             [ min_InDelDist => 5 ],
             [ closeInDelSameHap => 0 ], # close-InDel must be on the same haplo (0: N, 1: Y)
             ## reads selection
-            [ min_mapQ => 20 ],
+            [ mustMapChr_i => {Af => [], Hf => {}} ],
+            [ mustMapChr_j => {Af => [], Hf => {}} ],
+            [ min_mapQ => 30 ],
             [ use_spmap => 0 ],
             [ use_sdmap => 0 ],
             [ use_multmap => 0 ],
+            [ filter_pe => 0 ],
             [ maxCloseAlignDist => 1E3 ],
             [ skipCloseAlignFromInvalid => 0 ],
             # [ use_single_ump => 0 ], # might use supplementary alignments in future
@@ -207,16 +210,17 @@ sub Load_moduleVar_to_pubVarPool{
             [ baseQ_offset => 33 ],
             ## unknown reads operation
             [ max_readLength => 150 ],
-            [ mapPosWinRatio => 0.1 ],
+            [ mapPosWinRatio => 0.5 ],
             [ mapPosWinSize => undef ], # reset as 'UKreadsFlankRegUnit' * 'mapPosWinRatio'
             [ phasePEdetails => {} ], # record PE-map info and for de-dup
             [ phasePEcontact => {} ], # just record counts from 'phasePEdetails' hash
             [ UKreadsFlankRegUnit => 1E4 ],
-            [ UKreadsFlankRegUnitMaxTimes => 10 ],
-            [ UKreadsFlankRegUnitTimesAf => [] ],
-            [ UKreadsMaxPhasedHetMut => 5 ],
+            [ UKreadsFlankRegMax => 1E7 ], # 10mb
+            [ UKreadsFlankRegUnitMaxTimes => undef ],
+            # [ UKreadsFlankReg => [] ],
+            # [ UKreadsMaxPhasedHetMut => 0 ], # deprecated
             [ SkipDeDupPhasedReads => 0 ],
-            [ hapCombMinLinkForPhaReg => 1 ],
+            [ hapCombMinLinkForPhaReg => 5 ],
             ## dump contacts
             [ dumpMode => 'BP' ],
             [ dumpBinSize => '1MB' ],
@@ -308,16 +312,19 @@ sub Get_Cmd_Options{
         "-fork:i"   => \$V_Href->{forkNum},
         "-st_step:i"=> \$V_Href->{stepToStart},
         "-ed_step:i"=> \$V_Href->{stepToStop},
-        "-slbmpf:s" => \@{$V_Href->{SelectBamPref}},
+        "-slbmpf:s" => \@{$V_Href->{SelectBamPref}}, # hidden option
         "-rbfsize:s"=> \$V_Href->{rOB_AbufferSize}, # hidden option
         ## phased-Mut
         "-use_indel"=> \$V_Href->{use_InDel},
         "-min_idd:i"=> \$V_Href->{min_InDelDist},
         ## reads selection
+        "-chr_i:s"  => \@{$V_Href->{mustMapChr_i}->{Af}}, # hidden option
+        "-chr_j:s"  => \@{$V_Href->{mustMapChr_j}->{Af}}, # hidden option
         "-min_mq:i" => \$V_Href->{min_mapQ},
         "-use_sp"   => \$V_Href->{use_spmap},
         "-use_sd"   => \$V_Href->{use_sdmap},
         "-use_mm"   => \$V_Href->{use_multmap},
+        "-flt_pe"   => \$V_Href->{filter_pe},
         "-use_caln" => \$V_Href->{skipCloseAlignFromInvalid},
         # "-use_sgum"   => \$V_Href->{use_single_ump},
         "-max_rd:s" => \$V_Href->{maxCloseAlignDist},
@@ -328,10 +335,10 @@ sub Get_Cmd_Options{
         "-qual:i"   => \$V_Href->{baseQ_offset},
         ## unknown reads operation
         "-ucrfut:s" => \$V_Href->{UKreadsFlankRegUnit},
-        "-ucrftm:i" => \$V_Href->{UKreadsFlankRegUnitMaxTimes}, # hidden option
-        "-ucrpha:i" => \$V_Href->{UKreadsMaxPhasedHetMut},
+        "-ucrfmx:s" => \$V_Href->{UKreadsFlankRegMax},
+        # "-ucrpha:i" => \$V_Href->{UKreadsMaxPhasedHetMut}, # hidden option
         "-mpwr:f"   => \$V_Href->{mapPosWinRatio},
-        "-skipddp"  => \$V_Href->{SkipDeDupPhasedReads},
+        "-skipddp"  => \$V_Href->{SkipDeDupPhasedReads}, # hidden option
         "-min_ct:i" => \$V_Href->{hapCombMinLinkForPhaReg},
         ## dump contacts
         "-dpmode:s" => \$V_Href->{dumpMode},
@@ -357,8 +364,8 @@ sub para_alert{
              || $V_Href->{haploCount} < 2
              || ( $V_Href->{baseQ_offset} != 33 && $V_Href->{baseQ_offset} != 64 )
              || $V_Href->{UKreadsFlankRegUnit} < 5E3
-             || $V_Href->{UKreadsFlankRegUnitMaxTimes} < 1
-             || $V_Href->{UKreadsMaxPhasedHetMut} < 0
+             || $V_Href->{UKreadsFlankRegMax} < $V_Href->{UKreadsFlankRegUnit}
+             # || $V_Href->{UKreadsMaxPhasedHetMut} < 0
              || $V_Href->{mapPosWinRatio} <= 0 || $V_Href->{mapPosWinRatio} > 0.5
              || $V_Href->{stepToStart} < 1 || $V_Href->{stepToStart} > $V_Href->{totalStepNO}
              || $V_Href->{stepToStop}  < 1 || $V_Href->{stepToStop}  > $V_Href->{totalStepNO}
@@ -382,14 +389,14 @@ sub DivideHiCreadsToHaplotypes{
     load_chr_Things;
 
     # phased Het-mutation
-    load_phased_VCF;
+    # load_phased_VCF;
 
     # PE to categories
     # [ds]End-h[x], [ds]End-hInter, unkown, discard
     divide_pairBam;
 
     # release memory
-    release_phaseMut_OB;
+    # release_phaseMut_OB;
 
     # one-side confirmed contacts
     ## sEnd-h[x]
@@ -549,11 +556,18 @@ sub prepare{
         }
     }
 
-    # prepare local region size
-    for (my $pw = 0; 2 ** $pw < $V_Href->{UKreadsFlankRegUnitMaxTimes}; $pw++){
-        push @{$V_Href->{UKreadsFlankRegUnitTimesAf}}, 2 ** $pw;
+    # chr selection
+    for my $chr_ij (qw/ mustMapChr_i mustMapChr_j /){
+        if(scalar @{$V_Href->{$chr_ij}->{Af}}){
+            $V_Href->{$chr_ij}->{Hf}->{$_} = 1 for @{$V_Href->{$chr_ij}->{Af}};
+        }
+        else{
+            delete $V_Href->{$chr_ij};
+        }
     }
-    push @{$V_Href->{UKreadsFlankRegUnitTimesAf}}, $V_Href->{UKreadsFlankRegUnitMaxTimes};
+
+    # prepare local region size
+    $V_Href->{UKreadsFlankRegUnitMaxTimes} = POSIX::ceil($V_Href->{UKreadsFlankRegMax} / $V_Href->{UKreadsFlankRegUnit});
 
     # prepare PEsplitStat (dEnd and sEnd) of step s01
     for my $hap_i (1 .. $V_Href->{haploCount}){
@@ -573,6 +587,11 @@ sub prepare{
     }
 
     # delete possible previous results
+    &delete_prev_results;
+}
+
+# delete possible previous results
+sub delete_prev_results{
     if( $V_Href->{stepToStart} <= 1 ){
         `rm -rf $V_Href->{outdir}/*`;
     }
