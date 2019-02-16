@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
-$VERSION = "0.05";
-$DATE = '2019-02-11';
+$VERSION = "0.06";
+$DATE = '2019-02-16';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -40,6 +40,7 @@ $EMAIL = 'wenlongkxm@gmail.com';
 #--------- functions in this pm --------#
 my @functoion_list = qw/
                         dump_contacts
+                        prepare
                         load_enzyme_site_list
                         get_contacts_idx
                         get_dumpHeader
@@ -52,16 +53,16 @@ sub dump_contacts{
     # start from step after current step
     return if $V_Href->{stepToStart} > 5;
 
+    # folder, prefix, header
+    # real dumpBinSize
+    # enzyme_site (if FRAG)
+    &prepare;
+
     # group merged bam files belonging to each tag (h[x]Intra and hInter)
     my %tagToMergeBam;
     for my $pairBamHref ( @{$V_Href->{PairBamFiles}} ){
         push @{$tagToMergeBam{$_}}, $pairBamHref->{mergeBam}->{$_} for keys %{$pairBamHref->{mergeBam}};
     }
-    # use real number of bin_size
-    $V_Href->{dumpBinSize} = $V_Href->{dump_allowBinSize}->{$V_Href->{dumpMode}}->{uc($V_Href->{dumpBinSize})};
-    # load enzyme sites list in FRAG mode
-    &load_enzyme_site_list if($V_Href->{dumpMode} eq 'FRAG');
-
     # all OR specific tags, and check empty
     my @tag = sort keys %tagToMergeBam;
        @tag = grep /$V_Href->{dumpHapComb}/, @tag if defined $V_Href->{dumpHapComb};
@@ -93,6 +94,21 @@ sub dump_contacts{
 
     # stop at current step
     exit(0) if $V_Href->{stepToStop} == 5;
+}
+
+#--- prepare work ---
+sub prepare{
+    # folder
+    my $dumpOutDir = catfile($V_Href->{outdir}, $V_Href->{dumpSubDir});
+    (-d $dumpOutDir || `mkdir -p $dumpOutDir`);
+    # file-name-prefix (full-path)
+    $V_Href->{dumpFilePrefix} = catfile($dumpOutDir, "dumpContacts.$V_Href->{dumpMode}.$V_Href->{dumpBinSize}");
+    # use real number of bin_size
+    $V_Href->{dumpBinSize} = $V_Href->{dump_allowBinSize}->{$V_Href->{dumpMode}}->{uc($V_Href->{dumpBinSize})};
+    # header of dump output file
+    &get_dumpHeader;
+    # load enzyme sites list in FRAG mode
+    &load_enzyme_site_list if($V_Href->{dumpMode} eq 'FRAG');
 }
 
 #--- load enzyme site position list ---
@@ -180,22 +196,15 @@ sub contacts_output{
     my %parm = @_;
     my $tag = $parm{tag};
 
-    my $dumpOutDir = catfile($V_Href->{outdir}, $V_Href->{dumpSubDir});
-    (-d $dumpOutDir || `mkdir -p $dumpOutDir`);
-    my $output_prefix = "dumpContacts.$V_Href->{dumpMode}.$V_Href->{dumpBinSize}";
-
-    # dump header
-    &get_dumpHeader;
-
     # get chr-idx interval
     ## chr-bin-range log, only first time
     if(!defined $V_Href->{dumpBinLog}){
-        $V_Href->{dumpBinLog} = catfile($dumpOutDir, "$output_prefix.chrBinRange.txt");
+        $V_Href->{dumpBinLog} = "$V_Href->{dumpFilePrefix}.chrBinRange.txt";
         &write_dumpBinLog;
     }
 
     # output contacts
-    $V_Href->{dumpOutput} = catfile($dumpOutDir, "$output_prefix.$tag.contacts.txt.gz");
+    $V_Href->{dumpOutput} = "$V_Href->{dumpFilePrefix}.$tag.contacts.txt.gz";
     open (CNTC, Try_GZ_Write($V_Href->{dumpOutput})) || die "cannot write contacts file: $!\n";
     print CNTC $V_Href->{dumpHeader};
     print CNTC join("\t", '#hap_i:chr_i', 'chrBinIdx_i', "wgBinIdx_i", 'hap_j:chr_j', 'chrBinIdx_j', "wgBinIdx_j", "contacts\n");

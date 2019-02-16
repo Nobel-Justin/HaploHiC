@@ -228,25 +228,30 @@ sub get_rOBpair_HapLinkCount{
     if(exists $HapLinkHf->{link}->{$winTag{a}}){
         if(exists $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}}){
             $HapLinkHf->{stat}->{QuickFind} ++;
-            return @{ $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} };
+            my $LocRegInfoAf = $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}};
+            # phased local-region stat
+            if($LocRegInfoAf->[1] =~ /^RegionPhased;\(fSize:(\d+),/){
+                $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($1*2) }->{ sum(values %{$LocRegInfoAf->[0]}) } ++;
+            }
+            # return quickFind
+            return @$LocRegInfoAf;
         }
     }
     else{ # not find, must be next a-side bin-Idx
         %{$HapLinkHf->{link}} = ();
     }
-    # iteratively find sufficient phased Het-Mut in local flank region
+    # bisection to find proper size of local flank region to provide sufficient phased-contacts to impute
     my $chrHapLinkHref = $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}};
     my %fReg = map { ($_, {pos=>{}}) } keys %rOB;
     my @FlankSizeTime = (1, $V_Href->{UKreadsFlankRegUnitMaxTimes});
     while(1){
-        # stout_and_sterr "FlankSizeTime: @FlankSizeTime\n"; # debug
         my $time = int(sum(@FlankSizeTime)/2);
         my $FlankSize;
         my @judgement;
         for my $shift (-1, 0){
             $FlankSize = $V_Href->{UKreadsFlankRegUnit} * ($time + $shift);
             for my $s (sort keys %rOB){
-                # extract phased Het-Mut in 5/3 prime flanking region
+                # deal chromosome ends of 5/3 prime flanking region
                 my $mSegLen = $V_Href->{ChrThings}->{$mSeg{$s}}->{len};
                 my $FlankSize_p5 = max($mPos{$s}-$FlankSize, 1       ) - $mPos{$s}; # negative value
                 my $FlankSize_p3 = min($mExp{$s}+$FlankSize, $mSegLen) - $mExp{$s}; # positive value
@@ -323,10 +328,11 @@ sub get_rOBpair_HapLinkCount{
                     .",mPosWinIdx:$winIdx{$_}"
                     .')'
                     for sort keys %fReg;
-            # stout_and_sterr "$mark\n"; # debug
             # record
             $HapLinkHf->{stat}->{Calculate} ++;
             $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} = [\%HapLinkCount, $mark];
+            # phased local-region stat
+            $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($FlankSize*2) }->{ sum(values %HapLinkCount) } ++ if $phased;
             # return
             return (\%HapLinkCount, $mark);
         }

@@ -34,8 +34,8 @@ our $V_Href = {
     #++++++++++++++#
 
     MainName => 'HaploHiC.pl',
-    Version => '0.20',
-    Date => '2019-02-13',
+    Version => '0.21',
+    Date => '2019-02-16',
     AUTHOR => 'Wenlong Jia',
     EMAIL => 'wenlongkxm@gmail.com',
 

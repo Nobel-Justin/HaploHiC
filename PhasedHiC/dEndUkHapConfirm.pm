@@ -10,7 +10,7 @@ use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
-use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ getTODOpairBamHrefArray prepareGetHapBamObj startWriteGetHapBam /;
+use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ getTODOpairBamHrefArray prepareGetHapBamObj startWriteGetHapBam writeStatOfPhasedLocalRegion /;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount get_rOBpair_HapLinkCount /;
 
 require Exporter;
@@ -28,8 +28,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.17";
-$DATE = '2019-02-12';
+$VERSION = "0.18";
+$DATE = '2019-02-16';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -95,11 +95,14 @@ sub confirm_dEndUkHapPE_HapLink{
         # read unknown.bam
         my $hapSplitBam = $pairBamHref->{splitBam}->{$tag};
         my $HapLinkHf = { link => {}, stat => {Calculate=>0, LackChrLink=>0, QuickFind=>0} };
+        $V_Href->{LocRegPhased} = {}; # reset
         my @subrtOpt = (subrtRef => \&assign_dEndUKend_haplotype,
                         subrtParmAref => [tag => $tag, pairBamHref => $pairBamHref, HapLinkHf => $HapLinkHf]);
         $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
         # close getHapBam file-handle
         $_->stop_write for values %{$pairBamHref->{splitBam}};
+        # write stat of phased-local-region (size and linkCount)
+        writeStatOfPhasedLocalRegion(hapSplitBam => $hapSplitBam);
         # inform
         my $mark = $hapSplitBam->get_tag;
         my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});

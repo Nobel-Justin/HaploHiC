@@ -34,8 +34,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.19";
-$DATE = '2019-02-13';
+$VERSION = "0.20";
+$DATE = '2019-02-16';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -228,8 +228,9 @@ sub Load_moduleVar_to_pubVarPool{
             [ dumpPEdetails => {} ], # record PE-map info and for de-dup, similar to 'phasePEdetails'
             [ dumpPEcontact => {} ], # just record counts from 'dumpPEdetails' hash, similar to 'phasePEcontact'
             [ dumpSubDir => 'dumpContacts' ],
-            [ dumpOutput => undef ], # output
             [ dumpHeader => undef ], # output
+            [ dumpFilePrefix => undef ], # output prefix
+            [ dumpOutput => undef ], # output
             [ dumpBinLog => undef ], # output
             [ dumpHapComb => undef ], # select HapComb (h[x]Intra and hInter) to dump contacts
             ### FRAG specific
@@ -282,6 +283,8 @@ sub Load_moduleVar_to_pubVarPool{
             # {$chr}->{$PosIdx} = [ $PhasedMut_OB_1, $PhasedMut_OB_1, .. ]
             # check BioFuse::BioInfo::Objects::PhasedMut_OB
             [ PhasedMut => {} ],
+            # {flankSize}->{PhasedLinkCount} = $number
+            [ LocRegPhased => {} ],
 
             # list to abs-path
             [ ToAbsPath_Aref => [ ['outdir'],

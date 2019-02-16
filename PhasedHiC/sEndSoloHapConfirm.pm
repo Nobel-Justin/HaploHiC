@@ -23,6 +23,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
               getTODOpairBamHrefArray
               prepareGetHapBamObj
               startWriteGetHapBam
+              writeStatOfPhasedLocalRegion
             /;
 @EXPORT_OK = qw();
 %EXPORT_TAGS = ( DEFAULT => [qw()],
@@ -30,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.07";
-$DATE = '2019-02-13';
+$VERSION = "0.08";
+$DATE = '2019-02-16';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -46,6 +47,7 @@ my @functoion_list = qw/
                         startWriteGetHapBam
                         assign_sEndUKend_haplotype
                         findContactAnchor
+                        writeStatOfPhasedLocalRegion
                      /;
 
 #--- assign one-side confirmed contacts PE to certain haplo-contacts ---
@@ -109,11 +111,14 @@ sub confirm_sEndSoloHapPE_HapLink{
             # read hapSplit.bam
             my $hapSplitBam = $pairBamHref->{splitBam}->{$tag};
             my $HapLinkHf = { link => {}, stat => {Calculate=>0, LackChrLink=>0, QuickFind=>0} };
+            $V_Href->{LocRegPhased} = {}; # reset
             my @subrtOpt = (subrtRef => \&assign_sEndUKend_haplotype,
                             subrtParmAref => [tag => $tag, pairBamHref => $pairBamHref, HapLinkHf => $HapLinkHf]);
             $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
             # close getHapBam file-handle
             $_->stop_write for values %{$pairBamHref->{splitBam}};
+            # write stat of phased-local-region (size and linkCount)
+            &writeStatOfPhasedLocalRegion(hapSplitBam => $hapSplitBam);
             # inform
             my $mark = $hapSplitBam->get_tag;
             my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});
@@ -355,6 +360,31 @@ sub findContactAnchor{
         #     return ($hasHapIdx[-1], $nonHapIdx[0]);
         # }
     }
+}
+
+#--- write stat data of phased local region ---
+sub writeStatOfPhasedLocalRegion{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $hapSplitBam = $parm{hapSplitBam};
+
+    (my $statFile = $hapSplitBam->get_filepath) =~ s/bam$/statOfPhasedLocReg/;
+    open (STAT, Try_GZ_Write($statFile)) || die "fail to write statOfPhasedLocReg: $!\n";
+    print STAT join("\t", '#ChrPair', 'LocalRegionSize', 'PhasedContactsCount', 'Amount') . "\n";
+    for my $ChrPair (sort keys %{$V_Href->{LocRegPhased}}){
+        for my $LocRegSize (sort {$a<=>$b} keys %{$V_Href->{LocRegPhased}->{$ChrPair}}){
+            for my $LinkCount (sort {$a<=>$b} keys %{$V_Href->{LocRegPhased}->{$ChrPair}->{$LocRegSize}}){
+                print STAT join( "\t", 
+                                 $ChrPair,
+                                 $LocRegSize,
+                                 $LinkCount,
+                                 $V_Href->{LocRegPhased}->{$LocRegSize}->{$LinkCount}
+                               ) . "\n";
+            }
+        }
+    }
+    close STAT;
 }
 
 #--- 
