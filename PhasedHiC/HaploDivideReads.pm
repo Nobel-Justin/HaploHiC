@@ -601,20 +601,20 @@ sub delete_prev_results{
     else{
         if( $V_Href->{stepToStart} <= 2 ){
             if( scalar(keys %{$V_Href->{SelectBamPref}}) == 0 ){
-                `rm -rf $V_Href->{outdir}/*-workspace/*phMut-sEnd-h[0-9]*.h*Int*.bam`;
+                `rm -rf $V_Href->{outdir}/*-workspace/*phMut-sEnd-h[0-9]*.h*Int*.[bs][at]*`; # bam, statOf...
             }
             else{
-                `rm -rf $V_Href->{outdir}/*-workspace/$_.phMut-sEnd-h[0-9]*.h*Int*.bam` for keys %{$V_Href->{SelectBamPref}};
+                `rm -rf $V_Href->{outdir}/*-workspace/$_.phMut-sEnd-h[0-9]*.h*Int*.[bs][at]*` for keys %{$V_Href->{SelectBamPref}};
             }
         }
         if( $V_Href->{stepToStart} <= 3 ){
             if(    scalar(keys %{$V_Href->{SelectBamPref}}) == 0
                 || $V_Href->{stepToStart} != 3
             ){
-                `rm -rf $V_Href->{outdir}/*-workspace/*unknown.h*Int*.bam`;
+                `rm -rf $V_Href->{outdir}/*-workspace/*unknown.h*Int*.[bs][at]*`;
             }
             else{
-                `rm -rf $V_Href->{outdir}/*-workspace/$_.unknown.h*Int*.bam` for keys %{$V_Href->{SelectBamPref}};
+                `rm -rf $V_Href->{outdir}/*-workspace/$_.unknown.h*Int*.[bs][at]*` for keys %{$V_Href->{SelectBamPref}};
             }
         }
         if( $V_Href->{stepToStart} <= 4 ){
