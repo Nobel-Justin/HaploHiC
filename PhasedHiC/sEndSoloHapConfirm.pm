@@ -379,7 +379,7 @@ sub writeStatOfPhasedLocalRegion{
                                  $ChrPair,
                                  $LocRegSize,
                                  $LinkCount,
-                                 $V_Href->{LocRegPhased}->{$LocRegSize}->{$LinkCount}
+                                 $V_Href->{LocRegPhased}->{$ChrPair}->{$LocRegSize}->{$LinkCount}
                                ) . "\n";
             }
         }
