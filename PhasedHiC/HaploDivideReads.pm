@@ -34,8 +34,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.20";
-$DATE = '2019-02-16';
+$VERSION = "0.21";
+$DATE = '2019-02-21';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';

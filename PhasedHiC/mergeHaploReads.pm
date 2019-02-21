@@ -25,8 +25,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::mergeHaploReads';
 #----- version --------
-$VERSION = "0.03";
-$DATE = '2018-12-30';
+$VERSION = "0.04";
+$DATE = '2019-02-21';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -36,6 +36,7 @@ $EMAIL = 'wenlongkxm@gmail.com';
 my @functoion_list = qw/
                         merge_haplo_reads
                         mergeReadsOfEachHapComb
+                        mergeStatOfPhasedLocalRegion
                      /;
 
 #--- merge reads of each haplotype ---
@@ -64,6 +65,8 @@ sub merge_haplo_reads{
         if($fork_DO){ $pm->start and next; }
         # merge each type of hapComb
         &mergeReadsOfEachHapComb(pairBamHref => $pairBamHref);
+        # merge stat data of phased local region
+        &mergeStatOfPhasedLocalRegion(pairBamHref => $pairBamHref);
         # fork job finishes
         if($fork_DO){ $pm->finish; }
     }
@@ -109,6 +112,23 @@ sub mergeReadsOfEachHapComb{
         stout_and_sterr "[INFO]\t".`date`
                              ."\tmerge $mark bam OK.\n";
     }
+}
+
+#--- merge stat data of phased local region ---
+sub mergeStatOfPhasedLocalRegion{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pairBamHref = $parm{pairBamHref};
+
+    my @statFiles = glob catfile($pairBamHref->{workSpace}, '*.statOfPhasedLocReg.gz');
+    return if @statFiles == 0;
+    # merge
+    my $mergeStatFile = catfile($V_Href->{outdir}, $pairBamHref->{prefix}.'.statOfPhasedLocReg.gz');
+    ## header
+    `gzip -cd $statFiles[0] | grep '^#' | head -1 | gzip -c > $mergeStatFile`;
+    ## content
+    `zcat @statFiles | grep -v '^#' | sort -k 2,2 -k 3n,3 -k 4n,4 | gzip -c >> $mergeStatFile`;
 }
 
 #--- this is to make up the scenario lacks prime alignment ---

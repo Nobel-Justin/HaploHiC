@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.08";
-$DATE = '2019-02-16';
+$VERSION = "0.09";
+$DATE = '2019-02-21';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -118,7 +118,7 @@ sub confirm_sEndSoloHapPE_HapLink{
             # close getHapBam file-handle
             $_->stop_write for values %{$pairBamHref->{splitBam}};
             # write stat of phased-local-region (size and linkCount)
-            &writeStatOfPhasedLocalRegion(hapSplitBam => $hapSplitBam);
+            &writeStatOfPhasedLocalRegion(tag => "sEnd-h$hapIdx", hapSplitBam => $hapSplitBam);
             # inform
             my $mark = $hapSplitBam->get_tag;
             my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});
@@ -367,20 +367,25 @@ sub writeStatOfPhasedLocalRegion{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
+    my $tag = $parm{tag};
     my $hapSplitBam = $parm{hapSplitBam};
 
-    (my $statFile = $hapSplitBam->get_filepath) =~ s/bam$/statOfPhasedLocReg/;
+    (my $statFile = $hapSplitBam->get_filepath) =~ s/bam$/statOfPhasedLocReg.gz/;
     open (STAT, Try_GZ_Write($statFile)) || die "fail to write statOfPhasedLocReg: $!\n";
-    print STAT join("\t", '#ChrPair', 'LocalRegionSize', 'PhasedContactsCount', 'Amount') . "\n";
+    print STAT join("\t", '#Tag', 'ChrPair', 'LocalRegionSize', 'PhasedContactsCount', 'Details', 'Amount') . "\n";
     for my $ChrPair (sort keys %{$V_Href->{LocRegPhased}}){
         for my $LocRegSize (sort {$a<=>$b} keys %{$V_Href->{LocRegPhased}->{$ChrPair}}){
             for my $LinkCount (sort {$a<=>$b} keys %{$V_Href->{LocRegPhased}->{$ChrPair}->{$LocRegSize}}){
-                print STAT join( "\t", 
-                                 $ChrPair,
-                                 $LocRegSize,
-                                 $LinkCount,
-                                 $V_Href->{LocRegPhased}->{$ChrPair}->{$LocRegSize}->{$LinkCount}
-                               ) . "\n";
+                for my $LinkDetails (sort keys %{$V_Href->{LocRegPhased}->{$ChrPair}->{$LocRegSize}->{$LinkCount}}){
+                    print STAT join( "\t",
+                                     $tag,
+                                     $ChrPair,
+                                     $LocRegSize,
+                                     $LinkCount,
+                                     $LinkDetails,
+                                     $V_Href->{LocRegPhased}->{$ChrPair}->{$LocRegSize}->{$LinkCount}->{$LinkDetails}
+                                   ) . "\n";
+                }
             }
         }
     }

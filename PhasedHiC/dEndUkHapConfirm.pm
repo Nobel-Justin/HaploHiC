@@ -28,8 +28,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.18";
-$DATE = '2019-02-16';
+$VERSION = "0.19";
+$DATE = '2019-02-21';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -102,7 +102,7 @@ sub confirm_dEndUkHapPE_HapLink{
         # close getHapBam file-handle
         $_->stop_write for values %{$pairBamHref->{splitBam}};
         # write stat of phased-local-region (size and linkCount)
-        writeStatOfPhasedLocalRegion(hapSplitBam => $hapSplitBam);
+        writeStatOfPhasedLocalRegion(tag => 'unknown', hapSplitBam => $hapSplitBam);
         # inform
         my $mark = $hapSplitBam->get_tag;
         my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});

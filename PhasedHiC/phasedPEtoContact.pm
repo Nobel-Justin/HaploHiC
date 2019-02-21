@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.11";
-$DATE = '2019-02-11';
+$VERSION = "0.12";
+$DATE = '2019-02-21';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -231,7 +231,9 @@ sub get_rOBpair_HapLinkCount{
             my $LocRegInfoAf = $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}};
             # phased local-region stat
             if($LocRegInfoAf->[1] =~ /^RegionPhased;\(fSize:(\d+),/){
-                $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($1*2) }->{ sum(values %{$LocRegInfoAf->[0]}) } ++;
+                my $HapLinkCountSum = sum(values %{$LocRegInfoAf->[0]});
+                my $HapLinkDetails = join(';', map {"$_:$LocRegInfoAf->[0]->{$_}"} sort keys %{$LocRegInfoAf->[0]});
+                $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($1*2) }->{$HapLinkCountSum}->{$HapLinkDetails} ++;
             }
             # return quickFind
             return @$LocRegInfoAf;
@@ -332,7 +334,11 @@ sub get_rOBpair_HapLinkCount{
             $HapLinkHf->{stat}->{Calculate} ++;
             $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} = [\%HapLinkCount, $mark];
             # phased local-region stat
-            $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($FlankSize*2) }->{ sum(values %HapLinkCount) } ++ if $phased;
+            if($phased){
+                my $HapLinkCountSum = sum(values %HapLinkCount);
+                my $HapLinkDetails = join(';', map {"$_:$HapLinkCount{$_}"} sort keys %HapLinkCount);
+                $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($FlankSize*2) }->{$HapLinkCountSum}->{$HapLinkDetails} ++;
+            }
             # return
             return (\%HapLinkCount, $mark);
         }
