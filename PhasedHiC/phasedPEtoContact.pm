@@ -324,6 +324,7 @@ sub get_rOBpair_HapLinkCount{
         }
         # find enough HapLink or last time
         if($return){
+            $FlankSize ||= $V_Href->{mapPosWinSize}; # zero flank size uses mappos window
             my $mark = $phased ? 'RegionPhased' : 'RegionNotPhased';
             $mark .= ";(fSize:$FlankSize"
                     .",$mSeg{$_}:$fReg{$_}{pos}{p5}-$fReg{$_}{pos}{p3}"
