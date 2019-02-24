@@ -34,8 +34,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.21";
-$DATE = '2019-02-21';
+$VERSION = "0.22";
+$DATE = '2019-02-25';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -619,6 +619,7 @@ sub delete_prev_results{
         }
         if( $V_Href->{stepToStart} <= 4 ){
             `rm -rf $V_Href->{outdir}/*.merge.h*.bam`;
+            `rm -rf $V_Href->{outdir}/*.statOfPhasedLocReg.gz`;
         }
         # if only step NO.5,
         # it might use different setting,
