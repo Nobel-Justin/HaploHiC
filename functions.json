@@ -39,8 +39,16 @@
       "descp" : "make database files for juicer and HaploHiC operations.",
       "main_func" : "JuicerMakeDBwork"
    },
-   "adjustDump" : {
+   "plotLocReg" : {
       "mode_NO" : 7,
+      "_group" : "-",
+      "_comments" : "plot phased local region information.",
+      "module" : "HaploHiC::PhasedHiC::plotPhasedLocReg",
+      "descp" : "plot phased local region information.",
+      "main_func" : "plotPhasedLocReg"
+   },
+   "adjustDump" : {
+      "mode_NO" : 8,
       "_group" : "-",
       "_comments" : "adjust HaploHiC dump contacts based on juicer dump contacts.",
       "module" : "HaploHiC::PhasedHiC::adjustDumpContacts",

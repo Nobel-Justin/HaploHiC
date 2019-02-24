@@ -127,6 +127,7 @@ sub return_HELP_INFO{
 
      -- Haplotype work
         haplo_div      $V_Href->{func}->{haplo_div }->{descp}
+        plotLocReg     $V_Href->{func}->{plotLocReg}->{descp}
         adjustDump     $V_Href->{func}->{adjustDump}->{descp}
 
      -- Extensions

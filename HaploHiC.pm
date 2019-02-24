@@ -12,6 +12,7 @@ use HaploHiC::Extensions::JuicerDump;
 use HaploHiC::Extensions::FRAG2Gene;
 use HaploHiC::PhasedHiC::HaploDivideReads;
 use HaploHiC::PhasedHiC::adjustDumpContacts;
+use HaploHiC::PhasedHiC::plotPhasedLocReg;
 
 #--- 
 1; ## tell the perl script the successful access of this module.

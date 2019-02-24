@@ -98,6 +98,21 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 - mergeReadsOfEachHapComb
 - mergeStatOfPhasedLocalRegion
 
+## PhasedHiC/plotPhasedLocReg.pm
+### HaploHiC::PhasedHiC::plotPhasedLocReg
+### VERSION = "0.01"
+- return_HELP_INFO
+- Load_moduleVar_to_pubVarPool
+- Get_Cmd_Options
+- para_alert
+- plotPhasedLocReg
+- prepare
+- loadLocRegInfo
+- filter_hapDivTag
+- filter_chrPair
+- filter_hapComb
+- plotLocRegInfo
+
 ## PhasedHiC/dEndUkHapConfirm.pm
 ### HaploHiC::PhasedHiC::dEndUkHapConfirm
 ### VERSION = "0.19"
