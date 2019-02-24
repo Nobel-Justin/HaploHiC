@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.09";
-$DATE = '2019-02-21';
+$VERSION = "0.10";
+$DATE = '2019-02-25';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -372,6 +372,8 @@ sub writeStatOfPhasedLocalRegion{
 
     (my $statFile = $hapSplitBam->get_filepath) =~ s/bam$/statOfPhasedLocReg.gz/;
     open (STAT, Try_GZ_Write($statFile)) || die "fail to write statOfPhasedLocReg: $!\n";
+    (my $localRegionUnit = sprintf "%e", $V_Href->{UKreadsFlankRegUnit} * 2) =~ s/\.?0*e\+0?/E/;
+    print STAT "##LocalRegionUnit: $localRegionUnit\n";
     print STAT join("\t", '#Tag', 'ChrPair', 'LocalRegionSize', 'PhasedContactsCount', 'Details', 'Amount') . "\n";
     for my $ChrPair (sort keys %{$V_Href->{LocRegPhased}}){
         for my $LocRegSize (sort {$a<=>$b} keys %{$V_Href->{LocRegPhased}->{$ChrPair}}){

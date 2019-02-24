@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::plotPhasedLocReg';
 #----- version --------
-$VERSION = "0.01";
-$DATE = '2019-02-24';
+$VERSION = "0.02";
+$DATE = '2019-02-25';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -67,7 +67,6 @@ sub return_HELP_INFO{
         -svg     [s]  svg figure output. <required>
 
        # Options #
-        -lcrgut  [s]  the unit size of local region, minimum: 1E4. [2E4]
         -max_lg  [s]  maximum size of local region. [2E7]
         -tmr_lg  [f]  ratio for unilateral trimming from largest local region size. [0.01]
         -tmr_pc  [f]  ratio for unilateral trimming from phased link counts. [0.01]
@@ -101,7 +100,6 @@ sub Load_moduleVar_to_pubVarPool{
             [ svg_file => undef ],
 
             # options
-            [ localRegionUnit => 2E4 ],
             [ maxLocRegSize => 2E7 ],
             [ TrimRato => {UT=>0.01, LC=>0.01} ],
             [ color_rgb => '255,0,0' ],
@@ -113,6 +111,7 @@ sub Load_moduleVar_to_pubVarPool{
 
             # intermediate variants
             [ statFiles => [] ],
+            [ localRegionUnit => undef ],
             [ locRegInfo => {} ],
             [ maxLocRegUnitTime => 0 ],
             [ maxPhasedLinkC => 0 ],
@@ -134,7 +133,6 @@ sub Get_Cmd_Options{
         "-dir:s" => \$V_Href->{source_dir},
         "-svg:s" => \$V_Href->{svg_file},
         # option
-        "-lcrgut:s" => \$V_Href->{localRegionUnit},
         "-max_lg:s" => \$V_Href->{maxLocRegSize},
         "-tmr_lg:f" => \$V_Href->{TrimRato}->{UT},
         "-tmr_pc:f" => \$V_Href->{TrimRato}->{LC},
@@ -155,7 +153,6 @@ sub para_alert{
     return  (   $V_Href->{HELP}
              || !defined $V_Href->{source_dir}   || !-d $V_Href->{source_dir}
              || !defined $V_Href->{svg_file}
-             || $V_Href->{localRegionUnit} < 1E4
              || $V_Href->{TrimRato}->{UT} >= 1
              || $V_Href->{TrimRato}->{LC} >= 1
              || $V_Href->{color_rgb} !~ /^(\d+),(\d+),(\d+)$/
@@ -182,6 +179,14 @@ sub prepare{
     @{$V_Href->{statFiles}} = glob catfile($V_Href->{source_dir}, '*.statOfPhasedLocReg.gz');
     if(@{$V_Href->{statFiles}} == 0){
         warn_and_exit "<ERROR>\tcannot find any statOfPhasedLocReg.gz file.\n";
+    }
+    # get localRegionUnit from header
+    chomp(my $header = `zcat $V_Href->{statFiles}->[0] | grep '^##LocalRegionUnit' | head -1`);
+    if($header =~ /LocalRegionUnit:\s+(\S+)/){
+        $V_Href->{localRegionUnit} = $1;
+    }
+    else{
+        warn_and_exit "<ERROR>\tcannot get localRegionUnit from header of statOfPhasedLocReg.gz file.\n";
     }
     # color
     if($V_Href->{color_rgb} =~ /^(\d+),(\d+),(\d+)$/){

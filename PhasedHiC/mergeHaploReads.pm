@@ -126,7 +126,7 @@ sub mergeStatOfPhasedLocalRegion{
     # merge
     my $mergeStatFile = catfile($V_Href->{outdir}, $pairBamHref->{prefix}.'.statOfPhasedLocReg.gz');
     ## header
-    `gzip -cd $statFiles[0] | grep '^#' | head -1 | gzip -c > $mergeStatFile`;
+    `gzip -cd $statFiles[0] | grep '^#' | head -2 | gzip -c > $mergeStatFile`;
     ## content
     `zcat @statFiles | grep -v '^#' | sort -k 2,2 -k 3n,3 -k 4n,4 | gzip -c >> $mergeStatFile`;
 }
