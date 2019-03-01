@@ -132,7 +132,7 @@ sub load_phasedPE_contacts{
     # record, 'peInfoStr' as key, 'accumulated count' as value
     $V_Href->{phasePEdetails}->{$chr{a}}->{$chr{b}}->{$pIdx{a}}->{$pIdx{b}}->{"$hapID{a},$hapID{b}"}->{$peInfoStr} ++;
     # debug of Inter
-    if($hapID{a} ne $hapID{b}){
+    if($hapID{a} eq $hapID{b}){
         warn "pid\t".$pe_OB->get_pid."\n";
         warn "hap\t$hapID{a},$hapID{b}\n";
         warn "chr\t$chr{a},$chr{b}\n";
