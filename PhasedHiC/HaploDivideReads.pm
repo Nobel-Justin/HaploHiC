@@ -34,8 +34,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.22";
-$DATE = '2019-02-25';
+$VERSION = "0.23";
+$DATE = '2019-03-01';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -483,8 +483,8 @@ sub check_files{
             push @{$V_Href->{PairBamFiles}}, {R1_bam => $R1_bam, R2_bam => $R2_bam, prefix => $R1_bam_prefix, no => $i};
             $preBamFiles{$_} = 1 for ( $R1_bam_path, $R2_bam_path, $R1_bam_prefix );
         }
-        elsif(   $SourceBam =~ /R1/ || $SourceBam =~ /_1/
-              || $SourceBam =~ /R2/ || $SourceBam =~ /_2/
+        elsif(   basename($SourceBam) =~ /[\.\-_][R_]1[\.\-_]/
+              || basename($SourceBam) =~ /[\.\-_][R_]2[\.\-_]/
         ){  # potentially avoid that one line has only one SE bam
             warn_and_exit "<ERROR>\tcannot recognize R1/R2.bam files from input:\n"
                                 ."\t$SourceBam\n";
