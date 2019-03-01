@@ -132,14 +132,14 @@ sub load_phasedPE_contacts{
     # record, 'peInfoStr' as key, 'accumulated count' as value
     $V_Href->{phasePEdetails}->{$chr{a}}->{$chr{b}}->{$pIdx{a}}->{$pIdx{b}}->{"$hapID{a},$hapID{b}"}->{$peInfoStr} ++;
     # debug of Inter
-    if($hapID{a} eq $hapID{b}){
-        warn "pid\t".$pe_OB->get_pid."\n";
-        warn "hap\t$hapID{a},$hapID{b}\n";
-        warn "chr\t$chr{a},$chr{b}\n";
-        warn "pIdx\t$pIdx{a},$pIdx{b}\n";
-        warn "peInfoStr\t$peInfoStr\n";
-        warn Dumper($pe_OB);
-    }
+    # if($hapID{a} eq $hapID{b}){
+    #     warn "pid\t".$pe_OB->get_pid."\n";
+    #     warn "hap\t$hapID{a},$hapID{b}\n";
+    #     warn "chr\t$chr{a},$chr{b}\n";
+    #     warn "pIdx\t$pIdx{a},$pIdx{b}\n";
+    #     warn "peInfoStr\t$peInfoStr\n";
+    #     warn Dumper($pe_OB);
+    # }
 }
 
 #--- get window index of mapping position ---
