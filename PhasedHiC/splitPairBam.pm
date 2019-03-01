@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.21";
-$DATE = '2018-02-13';
+$VERSION = "0.22";
+$DATE = '2019-03-01';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -699,8 +699,8 @@ sub judge_on_PE{
             # check whether at least one end has 'UK'
             # if no,  phMut-dEnd-hx
             # if yes, phMut-dEnd-hx or phMut-sEnd-hx, based on close-alignment
-            my $changeTOsEndBool = $pe_OB->dEndSameHapJudge(maxCloseAlignDist => $V_Href->{maxCloseAlignDist});
-            if( ! $changeTOsEndBool ){
+            my $dEndKeepBool = $pe_OB->dEndSameHapJudge(maxCloseAlignDist => $V_Href->{maxCloseAlignDist});
+            if($dEndKeepBool){
                 $SplitBam_tag = "phMut-dEnd-$hapID";
                 $Split_marker = "dEndSoloHap;R1:$rEndJdgHref->{1}->{J};R2:$rEndJdgHref->{2}->{J}";
             }
