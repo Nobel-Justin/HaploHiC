@@ -25,6 +25,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 @ISA = qw(Exporter);
 @EXPORT = qw/
               divide_pairBam
+              forkSetting
             /;
 @EXPORT_OK = qw();
 %EXPORT_TAGS = ( DEFAULT => [qw()],
@@ -32,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.22";
-$DATE = '2019-03-01';
+$VERSION = "0.23";
+$DATE = '2019-03-03';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -43,6 +44,7 @@ $EMAIL = 'wenlongkxm@gmail.com';
 my @functoion_list = qw/
                         divide_pairBam
                         prepareSplitBamObj
+                        forkSetting
                         sourceToSplitBam
                         startWriteSplitBam
                         loadrOBfromSourceBam
@@ -75,21 +77,23 @@ sub divide_pairBam{
     load_enzyme_site_list;
 
     # fork manager
-    my $pm;
-    my $forkNum = min( $V_Href->{forkNum}, scalar(@{$V_Href->{PairBamFiles}}) );
-    my $fork_DO = ( $forkNum > 1 );
-    if($fork_DO){ $pm = new Parallel::ForkManager($forkNum) }
+    my ($pm, $fork_DO) = &forkSetting;
     # read paired bam files and split
     for my $pairBamHref (@{$V_Href->{PairBamFiles}}){
         # fork job starts
-        if($fork_DO){ $pm->start and next }
-        # distribute Hi-C PE-reads from source pairBam to different splitBam
-        &sourceToSplitBam(pairBamHref => $pairBamHref);
-        # sort splitBam, sEnd and unknown
-        ## use fork_DO to determine how to release memory
-        &sortSplitBamByPEcontact(pairBamHref => $pairBamHref, fork_DO => $fork_DO);
+        if($fork_DO){ $pm->start($pairBamHref->{prefix}) and next }
+        eval{
+            # distribute Hi-C PE-reads from source pairBam to different splitBam
+            &sourceToSplitBam(pairBamHref => $pairBamHref);
+            # sort splitBam, sEnd and unknown
+            &sortSplitBamByPEcontact(pairBamHref => $pairBamHref);
+        };
+        if($@){
+            if($fork_DO){ warn $@; $pm->finish(1) }
+            else{ warn_and_exit $@; }
+        }
         # fork job finishes
-        if($fork_DO){ $pm->finish }
+        if($fork_DO){ $pm->finish(0) }
     }
     # collect fork jobs
     if($fork_DO){ $pm->wait_all_children }
@@ -146,6 +150,24 @@ sub prepareSplitBamObj{
     ## here includes t1,t2,t4
     push @{$pairBamHref->{bamToMerge}->{"merge.h${_}Intra"}}, $pairBamHref->{splitBam}->{"phMut-dEnd-h$_"} for (1 .. $V_Href->{haploCount});
     push @{$pairBamHref->{bamToMerge}->{"merge.hInter"}}, $pairBamHref->{splitBam}->{$_} for ("phMut-dEnd-hInter", "phMut-sEnd-hInter");
+}
+
+#--- fork manager setting ---
+sub forkSetting{
+    my $forkNum = min($V_Href->{forkNum}, scalar(@{$V_Href->{PairBamFiles}}));
+    if($forkNum > 1){
+        my $pm = new Parallel::ForkManager($forkNum);
+        $pm->run_on_finish(
+            sub {
+                my ($pid, $exit_code, $bamPrefix, $signal) = @_;
+                warn_and_exit "<ERROR>\t$bamPrefix child-process($pid) failed.\n" if $exit_code || $signal;
+            }
+        );
+        return ($pm, 1);
+    }
+    else{
+        return (undef, 0);
+    }
 }
 
 #--- distribute reads to splitBam from source pairBam ---
@@ -841,15 +863,7 @@ sub sortSplitBamByPEcontact{
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $pairBamHref = $parm{pairBamHref};
-    my $fork_DO = $parm{fork_DO};
 
-    # # try to release memory firstly
-    # if($fork_DO){ # in child-process
-    #     $V_Href->{PhasedMut} = undef;
-    # }
-    # else{ # in main-process
-    #     release_phaseMut_OB; # this will also do agian after this step
-    # }
     ## release memory
     ## no matter in main-process or child-process
     $V_Href->{PhasedMut} = undef;

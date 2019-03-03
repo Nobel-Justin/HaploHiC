@@ -10,6 +10,7 @@ use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
+use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting /;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount get_rOBpair_HapLinkCount /;
 
 require Exporter;
@@ -31,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.10";
-$DATE = '2019-02-25';
+$VERSION = "0.11";
+$DATE = '2019-03-03';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -42,6 +43,7 @@ $EMAIL = 'wenlongkxm@gmail.com';
 my @functoion_list = qw/
                         sEndhx_get_HapLink
                         getTODOpairBamHrefArray
+                        sEndSoloHapConfirmWork
                         confirm_sEndSoloHapPE_HapLink
                         prepareGetHapBamObj
                         startWriteGetHapBam
@@ -88,55 +90,21 @@ sub confirm_sEndSoloHapPE_HapLink{
     # all bams or selected
     my @TODOpairBamHref = &getTODOpairBamHrefArray;
     # fork manager
-    my $pm;
-    my $forkNum = min( $V_Href->{forkNum}, scalar(@TODOpairBamHref) );
-    my $fork_DO = ( $forkNum > 1 );
-    if($fork_DO){ $pm = new Parallel::ForkManager($forkNum) }
+    my ($pm, $fork_DO) = &forkSetting;
     # load PE from sEnd-h[x].bam
     for my $pairBamHref ( @TODOpairBamHref ){
         # fork job starts
-        if($fork_DO){ $pm->start and next }
-        # load reads from each hapSplit.bam
-        for my $hapIdx (1 .. $V_Href->{haploCount}){
-            my $tag = "phMut-sEnd-h$hapIdx";
-            # prepare PEsplitStat
-            for my $chrTag (qw/ IntraChr InterChr /){
-                for my $assignMethod (qw/ ph rd /){
-                    $V_Href->{PEsplitStat}->{"$tag.hInter.$chrTag.$assignMethod"} = 0;
-                    $V_Href->{PEsplitStat}->{"$tag.h${hapIdx}Intra.$chrTag.$assignMethod"} = 0;
-                }
-            }
-            # prepare getHapBam and file-handle
-            &startWriteGetHapBam(pairBamHref => $pairBamHref, tag => $tag);
-            # read hapSplit.bam
-            my $hapSplitBam = $pairBamHref->{splitBam}->{$tag};
-            my $HapLinkHf = { link => {}, stat => {Calculate=>0, LackChrLink=>0, QuickFind=>0} };
-            $V_Href->{LocRegPhased} = {}; # reset
-            my @subrtOpt = (subrtRef => \&assign_sEndUKend_haplotype,
-                            subrtParmAref => [tag => $tag, pairBamHref => $pairBamHref, HapLinkHf => $HapLinkHf]);
-            $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
-            # close getHapBam file-handle
-            $_->stop_write for values %{$pairBamHref->{splitBam}};
-            # write stat of phased-local-region (size and linkCount)
-            &writeStatOfPhasedLocalRegion(tag => "sEnd-h$hapIdx", hapSplitBam => $hapSplitBam);
-            # inform
-            my $mark = $hapSplitBam->get_tag;
-            my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});
-            stout_and_sterr "[INFO]\t".`date`
-                                 ."\tassign haplotype to UK-end of PE-reads from $mark bam OK.\n"
-                                 ."\t$mark HapLinkStat: $HapLinkStat\n";
+        if($fork_DO){ $pm->start($pairBamHref->{prefix}) and next }
+        eval{
+            # confrim haplotype of 'U' end
+            &sEndSoloHapConfirmWork(pairBamHref => $pairBamHref);
+        };
+        if($@){
+            if($fork_DO){ warn $@; $pm->finish(1) }
+            else{ warn_and_exit $@; }
         }
-        # write report (2nd part)
-        ## previous contents
-        my @Content = split /\s+/, `cat $pairBamHref->{PEsplit_report}`;
-        my %Content = map {(@Content[$_,$_+1])} grep {$_%2==0 && $Content[$_] !~ /\.[rp][dh]:$/} (0 .. $#Content);
-        ## add contents of this step
-        open (PESRT, Try_GZ_Write($pairBamHref->{PEsplit_report})) || die "fail write '$pairBamHref->{prefix}' report: $!\n";
-        print PESRT "$Content[$_]\t$Content{$Content[$_]}\n" for grep {$_%2==0 && exists $Content{$Content[$_]}} (0 .. $#Content);
-        print PESRT "$_:\t$V_Href->{PEsplitStat}->{$_}\n" for grep {!exists $Content{"$_:"}} sort keys %{$V_Href->{PEsplitStat}};
-        close PESRT;
         # fork job finishes
-        if($fork_DO){ $pm->finish }
+        if($fork_DO){ $pm->finish(0) }
     }
     # collect fork jobs
     if($fork_DO){ $pm->wait_all_children }
@@ -176,6 +144,54 @@ sub getTODOpairBamHrefArray{
     return   scalar(keys %{$V_Href->{SelectBamPref}}) == 0
            ? @{$V_Href->{PairBamFiles}}
            : grep exists $V_Href->{SelectBamPref}->{$_->{prefix}}, @{$V_Href->{PairBamFiles}};
+}
+
+#--- main work of this module ---
+sub sEndSoloHapConfirmWork{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pairBamHref = $parm{pairBamHref};
+
+    # load reads from each hapSplit.bam
+    for my $hapIdx (1 .. $V_Href->{haploCount}){
+        my $tag = "phMut-sEnd-h$hapIdx";
+        # prepare PEsplitStat
+        for my $chrTag (qw/ IntraChr InterChr /){
+            for my $assignMethod (qw/ ph rd /){
+                $V_Href->{PEsplitStat}->{"$tag.hInter.$chrTag.$assignMethod"} = 0;
+                $V_Href->{PEsplitStat}->{"$tag.h${hapIdx}Intra.$chrTag.$assignMethod"} = 0;
+            }
+        }
+        # prepare getHapBam and file-handle
+        &startWriteGetHapBam(pairBamHref => $pairBamHref, tag => $tag);
+        # read hapSplit.bam
+        my $hapSplitBam = $pairBamHref->{splitBam}->{$tag};
+        my $HapLinkHf = { link => {}, stat => {Calculate=>0, LackChrLink=>0, QuickFind=>0} };
+        $V_Href->{LocRegPhased} = {}; # reset
+        my @subrtOpt = (subrtRef => \&assign_sEndUKend_haplotype,
+                        subrtParmAref => [tag => $tag, pairBamHref => $pairBamHref, HapLinkHf => $HapLinkHf]);
+        $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
+        # close getHapBam file-handle
+        $_->stop_write for values %{$pairBamHref->{splitBam}};
+        # write stat of phased-local-region (size and linkCount)
+        &writeStatOfPhasedLocalRegion(tag => "sEnd-h$hapIdx", hapSplitBam => $hapSplitBam);
+        # inform
+        my $mark = $hapSplitBam->get_tag;
+        my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});
+        stout_and_sterr "[INFO]\t".`date`
+                             ."\tassign haplotype to UK-end of PE-reads from $mark bam OK.\n"
+                             ."\t$mark HapLinkStat: $HapLinkStat\n";
+    }
+    # write report (2nd part)
+    ## previous contents
+    my @Content = split /\s+/, `cat $pairBamHref->{PEsplit_report}`;
+    my %Content = map {(@Content[$_,$_+1])} grep {$_%2==0 && $Content[$_] !~ /\.[rp][dh]:$/} (0 .. $#Content);
+    ## add contents of this step
+    open (PESRT, Try_GZ_Write($pairBamHref->{PEsplit_report})) || die "fail write '$pairBamHref->{prefix}' report: $!\n";
+    print PESRT "$Content[$_]\t$Content{$Content[$_]}\n" for grep {$_%2==0 && exists $Content{$Content[$_]}} (0 .. $#Content);
+    print PESRT "$_:\t$V_Href->{PEsplitStat}->{$_}\n" for grep {!exists $Content{"$_:"}} sort keys %{$V_Href->{PEsplitStat}};
+    close PESRT;
 }
 
 #--- start writing getHapBam (file-w-handle, SAM-header) ---

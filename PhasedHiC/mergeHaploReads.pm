@@ -10,6 +10,8 @@ use BioFuse::Util::Sys qw/ file_exist /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
+use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting /;
+
 require Exporter;
 
 #----- systemic variables -----
@@ -25,8 +27,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::mergeHaploReads';
 #----- version --------
-$VERSION = "0.04";
-$DATE = '2019-02-21';
+$VERSION = "0.05";
+$DATE = '2019-03-03';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -55,23 +57,26 @@ sub merge_haplo_reads{
     return if $V_Href->{stepToStart} > 4;
 
     # fork manager
-    my $pm;
-    my $forkNum = min( $V_Href->{forkNum}, scalar(@{$V_Href->{PairBamFiles}}) );
-    my $fork_DO = ( $forkNum > 1 );
-    if($fork_DO){ $pm = new Parallel::ForkManager($forkNum) }
+    my ($pm, $fork_DO) = &forkSetting;
     # merge haploComb bam
     for my $pairBamHref ( @{$V_Href->{PairBamFiles}} ){
         # fork job starts
-        if($fork_DO){ $pm->start and next; }
-        # merge each type of hapComb
-        &mergeReadsOfEachHapComb(pairBamHref => $pairBamHref);
-        # merge stat data of phased local region
-        &mergeStatOfPhasedLocalRegion(pairBamHref => $pairBamHref);
+        if($fork_DO){ $pm->start($pairBamHref->{prefix}) and next }
+        eval{
+            # merge each type of hapComb
+            &mergeReadsOfEachHapComb(pairBamHref => $pairBamHref);
+            # merge stat data of phased local region
+            &mergeStatOfPhasedLocalRegion(pairBamHref => $pairBamHref);
+        };
+        if($@){
+            if($fork_DO){ warn $@; $pm->finish(1) }
+            else{ warn_and_exit $@; }
+        }
         # fork job finishes
-        if($fork_DO){ $pm->finish; }
+        if($fork_DO){ $pm->finish(0) }
     }
     # collect fork jobs
-    if($fork_DO){ $pm->wait_all_children; }
+    if($fork_DO){ $pm->wait_all_children }
 
     # stop at current step
     exit(0) if $V_Href->{stepToStop} == 4;
