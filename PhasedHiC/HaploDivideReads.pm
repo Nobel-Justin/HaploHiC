@@ -34,8 +34,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.24";
-$DATE = '2019-03-03';
+$VERSION = "0.25";
+$DATE = '2019-03-06';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -113,6 +113,7 @@ sub return_HELP_INFO{
         -mpwr    [f]  ratio of '-ucrfut' to set as window size to store phased contacts. (0, [0.5]]
                        Note: the less '-mpwr' is, the more memory and cpu-time consumed.
         -min_ct  [i]  the minimum contact count from phased pairs to confirm phased local regions. [5]
+        -add_ct  [i]  uniform addition to each haplotype combination in phased local region. [1]
 
        # Options of step NO.5 #
         -dpmode  [s]  mode of dump, 'BP' or 'FRAG'. [BP]
@@ -221,6 +222,7 @@ sub Load_moduleVar_to_pubVarPool{
             # [ UKreadsMaxPhasedHetMut => 0 ], # deprecated
             [ SkipDeDupPhasedReads => 0 ],
             [ hapCombMinLinkForPhaReg => 5 ],
+            [ uniformAddCountForHapComb => 1 ],
             ## dump contacts
             [ dumpMode => 'BP' ],
             [ dumpBinSize => '1MB' ],
@@ -343,6 +345,7 @@ sub Get_Cmd_Options{
         "-mpwr:f"   => \$V_Href->{mapPosWinRatio},
         "-skipddp"  => \$V_Href->{SkipDeDupPhasedReads}, # hidden option
         "-min_ct:i" => \$V_Href->{hapCombMinLinkForPhaReg},
+        "-add_ct:i" => \$V_Href->{uniformAddCountForHapComb},
         ## dump contacts
         "-dpmode:s" => \$V_Href->{dumpMode},
         "-dpbin:s"  => \$V_Href->{dumpBinSize},

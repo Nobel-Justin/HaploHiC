@@ -29,8 +29,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.20";
-$DATE = '2019-03-03';
+$VERSION = "0.21";
+$DATE = '2019-03-06';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -178,6 +178,10 @@ sub assign_dEndUKend_haplotype{
     }
     else{
         $assignMethod = 'ph';
+        # uniform addition
+        if($V_Href->{uniformAddCountForHapComb}){
+            $HapLinkC_Href->{$_} += $V_Href->{uniformAddCountForHapComb} for @{$V_Href->{allHapComb}};
+        }
     }
     ## select hapComb
     my $assHapComb;
