@@ -30,7 +30,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
 $VERSION = "0.21";
-$DATE = '2019-03-06';
+$DATE = '2019-03-07';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -179,8 +179,9 @@ sub assign_dEndUKend_haplotype{
     else{
         $assignMethod = 'ph';
         # uniform addition
-        if($V_Href->{uniformAddCountForHapComb}){
-            $HapLinkC_Href->{$_} += $V_Href->{uniformAddCountForHapComb} for @{$V_Href->{allHapComb}};
+        if($V_Href->{uniformAddRatioForHapComb}){
+            my $add = sum(values %$HapLinkC_Href) * $V_Href->{uniformAddRatioForHapComb};
+            $HapLinkC_Href->{$_} += $add for @{$V_Href->{allHapComb}};
         }
     }
     ## select hapComb
@@ -201,7 +202,7 @@ sub assign_dEndUKend_haplotype{
             $hapCombDraw{$hapComb} = $allCount;
         }
         ## random pick
-        my $luck_draw = int(rand($allCount));
+        my $luck_draw = sprintf "%.3f", rand($allCount); # int()
         $assHapComb = first { $hapCombDraw{$_} > $luck_draw } sort keys %hapCombDraw;
         ## add mark
         $mark .= ";[$_](C:$HapLinkC_Href->{$_},D:$hapCombDraw{$_})" for keys %hapCombDraw;

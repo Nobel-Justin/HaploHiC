@@ -33,7 +33,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
 $VERSION = "0.12";
-$DATE = '2019-03-06';
+$DATE = '2019-03-07';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -211,6 +211,7 @@ sub startWriteGetHapBam{
     $HeadAf->[$PGi] .= " -ucrfut $V_Href->{UKreadsFlankRegUnit}";
     $HeadAf->[$PGi] .= " -ucrfmx $V_Href->{UKreadsFlankRegMax}";
     $HeadAf->[$PGi] .= " -min_ct $V_Href->{hapCombMinLinkForPhaReg}";
+    $HeadAf->[$PGi] .= " -add_r $V_Href->{uniformAddRatioForHapComb}";
     # $HeadAf->[$PGi] .= " -ucrpha $V_Href->{UKreadsMaxPhasedHetMut}";
     my $HeadStr = join('', @$HeadAf) . "\n";
 
@@ -270,8 +271,9 @@ sub assign_sEndUKend_haplotype{
     else{
         $assignMethod = 'ph';
         # uniform addition
-        if($V_Href->{uniformAddCountForHapComb}){
-            $HapLinkC_Href->{$_} += $V_Href->{uniformAddCountForHapComb} for grep /$regex/, @{$V_Href->{allHapComb}};
+        if($V_Href->{uniformAddRatioForHapComb}){
+            my $add = sum(values %$HapLinkC_Href) * $V_Href->{uniformAddRatioForHapComb};
+            $HapLinkC_Href->{$_} += $add for grep /$regex/, @{$V_Href->{allHapComb}};
         }
     }
     ## select hapComb
@@ -292,7 +294,7 @@ sub assign_sEndUKend_haplotype{
             $hapCombDraw{$hapComb} = $allCount;
         }
         # random pick
-        my $luck_draw = int(rand($allCount));
+        my $luck_draw = sprintf "%.3f", rand($allCount); # int()
         $assHapComb = first { $hapCombDraw{$_} > $luck_draw } sort keys %hapCombDraw;
         # add mark
         $mark .= ";[$_](C:$HapLinkC_Href->{$_},D:$hapCombDraw{$_})" for keys %hapCombDraw;

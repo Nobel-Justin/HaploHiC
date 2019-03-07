@@ -35,7 +35,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
 $VERSION = "0.25";
-$DATE = '2019-03-06';
+$DATE = '2019-03-07';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -112,8 +112,8 @@ sub return_HELP_INFO{
         -ucrfmx  [s]  the maximum size of unilateral local flanking region when extends. [1E7]
         -mpwr    [f]  ratio of '-ucrfut' to set as window size to store phased contacts. (0, [0.5]]
                        Note: the less '-mpwr' is, the more memory and cpu-time consumed.
-        -min_ct  [i]  the minimum contact count from phased pairs to confirm phased local regions. [5]
-        -add_ct  [i]  uniform addition to each haplotype combination in phased local region. [1]
+        -min_ct  [i]  the minimum contact count from phased pairs to confirm phased local regions. >=[5]
+        -add_r   [f]  uniform addition ratio to each haplotype combination in phased local region. [0.01]<=0.1
 
        # Options of step NO.5 #
         -dpmode  [s]  mode of dump, 'BP' or 'FRAG'. [BP]
@@ -222,7 +222,7 @@ sub Load_moduleVar_to_pubVarPool{
             # [ UKreadsMaxPhasedHetMut => 0 ], # deprecated
             [ SkipDeDupPhasedReads => 0 ],
             [ hapCombMinLinkForPhaReg => 5 ],
-            [ uniformAddCountForHapComb => 1 ],
+            [ uniformAddRatioForHapComb => 0.01 ],
             ## dump contacts
             [ dumpMode => 'BP' ],
             [ dumpBinSize => '1MB' ],
@@ -345,7 +345,7 @@ sub Get_Cmd_Options{
         "-mpwr:f"   => \$V_Href->{mapPosWinRatio},
         "-skipddp"  => \$V_Href->{SkipDeDupPhasedReads}, # hidden option
         "-min_ct:i" => \$V_Href->{hapCombMinLinkForPhaReg},
-        "-add_ct:i" => \$V_Href->{uniformAddCountForHapComb},
+        "-add_r:f"  => \$V_Href->{uniformAddRatioForHapComb},
         ## dump contacts
         "-dpmode:s" => \$V_Href->{dumpMode},
         "-dpbin:s"  => \$V_Href->{dumpBinSize},
@@ -372,6 +372,8 @@ sub para_alert{
              || $V_Href->{UKreadsFlankRegUnit} < 5E3
              || $V_Href->{UKreadsFlankRegMax} < $V_Href->{UKreadsFlankRegUnit}
              # || $V_Href->{UKreadsMaxPhasedHetMut} < 0
+             || $V_Href->{hapCombMinLinkForPhaReg} < 5
+             || $V_Href->{uniformAddRatioForHapComb} > 0.1
              || $V_Href->{mapPosWinRatio} <= 0 || $V_Href->{mapPosWinRatio} > 0.5
              || $V_Href->{stepToStart} < 1 || $V_Href->{stepToStart} > $V_Href->{totalStepNO}
              || $V_Href->{stepToStop}  < 1 || $V_Href->{stepToStop}  > $V_Href->{totalStepNO}
