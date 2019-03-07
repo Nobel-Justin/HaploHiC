@@ -277,8 +277,8 @@ sub assign_sEndUKend_haplotype{
         }
     }
     ## select hapComb
-    my @HapComb = sort keys %$HapLinkC_Href;
     my $assHapComb;
+    my @HapComb = sort keys %$HapLinkC_Href;
     ## if has only single HapComb, just take it
     if(scalar(@HapComb) == 1){
         $assHapComb = $HapComb[0];
@@ -294,10 +294,10 @@ sub assign_sEndUKend_haplotype{
             $hapCombDraw{$hapComb} = $allCount;
         }
         # random pick
-        my $luck_draw = sprintf "%.3f", rand($allCount); # int()
-        $assHapComb = first { $hapCombDraw{$_} > $luck_draw } sort keys %hapCombDraw;
+        my $luck_draw = int(rand($allCount) * 1E3) / 1E3; # not sprintf
+        $assHapComb = first { $hapCombDraw{$_} > $luck_draw } @HapComb;
         # add mark
-        $mark .= ";[$_](C:$HapLinkC_Href->{$_},D:$hapCombDraw{$_})" for keys %hapCombDraw;
+        $mark .= ";[$_](C:$HapLinkC_Href->{$_},D:$hapCombDraw{$_})" for @HapComb;
         $mark .= ";RD:$luck_draw";
     }
     ## remove the pre-set hasHap-ID

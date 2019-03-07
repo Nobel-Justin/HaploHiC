@@ -187,25 +187,25 @@ sub assign_dEndUKend_haplotype{
     ## select hapComb
     my $assHapComb;
     my @HapComb = sort keys %$HapLinkC_Href;
-    # if has only single HapComb, just take it
+    ## if has only single HapComb, just take it
     if(scalar(@HapComb) == 1){
         $assHapComb = $HapComb[0];
         # add mark
         $mark .= ";SoloHapComb;[$assHapComb](C:$HapLinkC_Href->{$assHapComb})";
     }
     else{ # luck draw
-        ## prepare haplotype's luck-draw interval
+        # prepare haplotype's luck-draw interval
         my $allCount = 0;
         my %hapCombDraw;
         for my $hapComb (@HapComb){
             $allCount += $HapLinkC_Href->{$hapComb};
             $hapCombDraw{$hapComb} = $allCount;
         }
-        ## random pick
-        my $luck_draw = sprintf "%.3f", rand($allCount); # int()
-        $assHapComb = first { $hapCombDraw{$_} > $luck_draw } sort keys %hapCombDraw;
-        ## add mark
-        $mark .= ";[$_](C:$HapLinkC_Href->{$_},D:$hapCombDraw{$_})" for keys %hapCombDraw;
+        # random pick
+        my $luck_draw = int(rand($allCount) * 1E3) / 1E3; # not sprintf
+        $assHapComb = first { $hapCombDraw{$_} > $luck_draw } @HapComb;
+        # add mark
+        $mark .= ";[$_](C:$HapLinkC_Href->{$_},D:$hapCombDraw{$_})" for @HapComb;
         $mark .= ";RD:$luck_draw";
     }
     ## assign

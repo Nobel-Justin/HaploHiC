@@ -113,7 +113,6 @@ sub return_HELP_INFO{
         -mpwr    [f]  ratio of '-ucrfut' to set as window size to store phased contacts. (0, [0.5]]
                        Note: the less '-mpwr' is, the more memory and cpu-time consumed.
         -min_ct  [i]  the minimum contact count from phased pairs to confirm phased local regions. >=[5]
-        -add_r   [f]  uniform addition ratio to each haplotype combination in phased local region. [0.01]<=0.1
 
        # Options of step NO.5 #
         -dpmode  [s]  mode of dump, 'BP' or 'FRAG'. [BP]
@@ -150,6 +149,7 @@ sub return_HELP_INFO{
         #                Note: 1) PE Hi-C reads are always aligned seperatedly, e.g., BWA mem.
         #                      2) inputs as: -bam a_R1.bam,a_R2.bam -bam b_R1.bam,b_R2.bam
         #                      3) can applied for multiple runs: run-a, run-b, .., run-n
+        # -add_r   [f]  uniform addition ratio to each haplotype combination in phased local region. [0]<=0.1
 }
 
 #--- load variant of this module to public variant (V_Href in LoadOn.pm) ---
@@ -222,7 +222,7 @@ sub Load_moduleVar_to_pubVarPool{
             # [ UKreadsMaxPhasedHetMut => 0 ], # deprecated
             [ SkipDeDupPhasedReads => 0 ],
             [ hapCombMinLinkForPhaReg => 5 ],
-            [ uniformAddRatioForHapComb => 0.01 ],
+            [ uniformAddRatioForHapComb => 0 ],
             ## dump contacts
             [ dumpMode => 'BP' ],
             [ dumpBinSize => '1MB' ],
