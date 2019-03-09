@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.12";
-$DATE = '2019-02-21';
+$VERSION = "0.14";
+$DATE = '2019-03-09';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -191,7 +191,7 @@ sub phasePE_contacts_to_count{
     # inform
     my $action = $V_Href->{SkipDeDupPhasedReads} ? 'Load' : 'De-dup';
     stout_and_sterr "[INFO]\t".`date`
-                         ."\t$action $tag phased PE-reads and get $deDupCount contacts OK.\n";
+                         ."\t$action $tag phased PE-reads and get $deDupCount contacts OK.\n" if $deDupCount >= 10;
 }
 
 #--- return haplo link count of given reads_OB pair ---
@@ -226,7 +226,7 @@ sub get_rOBpair_HapLinkCount{
         || ! exists $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}}
     ){
         $HapLinkHf->{stat}->{LackChrLink} ++;
-        return (\%HapLinkCount, "LackChrLink($mSeg{a},$mSeg{b})");
+        return [\%HapLinkCount, "LackChrLink($mSeg{a},$mSeg{b})", 'rd', 0];
     }
     # then, pos-pair
     my %mPos = map { ($_, $rOB{$_}->get_mpos) } keys %rOB;
@@ -245,7 +245,7 @@ sub get_rOBpair_HapLinkCount{
                 $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($1*2) }->{$HapLinkCountSum}->{$HapLinkDetails} ++;
             }
             # return quickFind
-            return @$LocRegInfoAf;
+            return $LocRegInfoAf;
         }
     }
     else{ # not find, must be next a-side bin-Idx
@@ -255,8 +255,10 @@ sub get_rOBpair_HapLinkCount{
     my $chrHapLinkHref = $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}};
     my %fReg = map { ($_, {pos=>{}}) } keys %rOB;
     my @FlankSizeTime = (1, $V_Href->{UKreadsFlankRegUnitMaxTimes});
+    my $time = undef;
     while(1){
-        my $time = int(sum(@FlankSizeTime)/2);
+        # use UnitTimes conceived from previously applied
+        $time = defined($time) ? int(sum(@FlankSizeTime)/2) : $V_Href->{UKreadsFlankRegUnitIniTimes};
         my $FlankSize;
         my @judgement;
         for my $shift (-1, 0){
@@ -341,16 +343,22 @@ sub get_rOBpair_HapLinkCount{
                     .')'
                     for sort keys %fReg;
             # record
+            my $LocRegInfoAf = [\%HapLinkCount, $mark, ($phased?'ph':'rd'), 0];
             $HapLinkHf->{stat}->{Calculate} ++;
-            $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} = [\%HapLinkCount, $mark];
-            # phased local-region stat
+            $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} = $LocRegInfoAf;
+            # 1) phased local-region stat
+            # 2) update the UnitTimes for next operation
             if($phased){
                 my $HapLinkCountSum = sum(values %HapLinkCount);
                 my $HapLinkDetails = join(';', map {"$_:$HapLinkCount{$_}"} sort keys %HapLinkCount);
                 $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($FlankSize*2) }->{$HapLinkCountSum}->{$HapLinkDetails} ++;
+                $V_Href->{UKreadsFlankRegUnitIniTimes} = max( min( $time*2, $V_Href->{UKreadsFlankRegUnitMidTimes} ), 1 );
+            }
+            else{
+                $V_Href->{UKreadsFlankRegUnitIniTimes} = $time;
             }
             # return
-            return (\%HapLinkCount, $mark);
+            return $LocRegInfoAf;
         }
     }
 }

@@ -34,8 +34,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.25";
-$DATE = '2019-03-07';
+$VERSION = "0.26";
+$DATE = '2019-03-09';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -218,6 +218,8 @@ sub Load_moduleVar_to_pubVarPool{
             [ UKreadsFlankRegUnit => 1E4 ],
             [ UKreadsFlankRegMax => 1E7 ], # 10mb
             [ UKreadsFlankRegUnitMaxTimes => undef ],
+            [ UKreadsFlankRegUnitMidTimes => undef ],
+            [ UKreadsFlankRegUnitIniTimes => undef ],
             # [ UKreadsFlankReg => [] ],
             # [ UKreadsMaxPhasedHetMut => 0 ], # deprecated
             [ SkipDeDupPhasedReads => 0 ],
@@ -345,7 +347,7 @@ sub Get_Cmd_Options{
         "-mpwr:f"   => \$V_Href->{mapPosWinRatio},
         "-skipddp"  => \$V_Href->{SkipDeDupPhasedReads}, # hidden option
         "-min_ct:i" => \$V_Href->{hapCombMinLinkForPhaReg},
-        "-add_r:f"  => \$V_Href->{uniformAddRatioForHapComb},
+        "-add_r:f"  => \$V_Href->{uniformAddRatioForHapComb}, # hidden option
         ## dump contacts
         "-dpmode:s" => \$V_Href->{dumpMode},
         "-dpbin:s"  => \$V_Href->{dumpBinSize},
@@ -396,15 +398,9 @@ sub DivideHiCreadsToHaplotypes{
     &prepare;
     load_chr_Things;
 
-    # phased Het-mutation
-    # load_phased_VCF;
-
     # PE to categories
     # [ds]End-h[x], [ds]End-hInter, unkown, discard
     divide_pairBam;
-
-    # release memory
-    # release_phaseMut_OB;
 
     # one-side confirmed contacts
     ## sEnd-h[x]
@@ -576,6 +572,8 @@ sub prepare{
 
     # prepare local region size
     $V_Href->{UKreadsFlankRegUnitMaxTimes} = POSIX::ceil($V_Href->{UKreadsFlankRegMax} / $V_Href->{UKreadsFlankRegUnit});
+    $V_Href->{UKreadsFlankRegUnitMidTimes} = int((1 + $V_Href->{UKreadsFlankRegUnitMaxTimes}) / 2);
+    $V_Href->{UKreadsFlankRegUnitIniTimes} = $V_Href->{UKreadsFlankRegUnitMidTimes};
 
     # prepare PEsplitStat (dEnd and sEnd) of step s01
     for my $hap_i (1 .. $V_Href->{haploCount}){
