@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.12";
-$DATE = '2019-03-07';
+$VERSION = "0.13";
+$DATE = '2019-03-09';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -211,7 +211,7 @@ sub startWriteGetHapBam{
     $HeadAf->[$PGi] .= " -ucrfut $V_Href->{UKreadsFlankRegUnit}";
     $HeadAf->[$PGi] .= " -ucrfmx $V_Href->{UKreadsFlankRegMax}";
     $HeadAf->[$PGi] .= " -min_ct $V_Href->{hapCombMinLinkForPhaReg}";
-    $HeadAf->[$PGi] .= " -add_r $V_Href->{uniformAddRatioForHapComb}";
+    $HeadAf->[$PGi] .= " -add_r $V_Href->{uniformAddRatioForHapComb}" if $V_Href->{uniformAddRatioForHapComb};
     # $HeadAf->[$PGi] .= " -ucrpha $V_Href->{UKreadsMaxPhasedHetMut}";
     my $HeadStr = join('', @$HeadAf) . "\n";
 
@@ -252,52 +252,55 @@ sub assign_sEndUKend_haplotype{
     # get haplo link count of paired rOB, <needs to sort again>
     ## only keep pre-set hapID combination
     my $regex = $hasHapIdx < $nonHapIdx ? "^$hasHapID," : ",$hasHapID\$";
-    my ($HapLinkC_Href, $mark) = get_rOBpair_HapLinkCount(rOB_a => $hasHap_rOB, rOB_b => $nonHap_rOB, hapRegex => $regex, HapLinkHf => $HapLinkHf);
+    my $LocRegInfoAf = get_rOBpair_HapLinkCount(rOB_a => $hasHap_rOB, rOB_b => $nonHap_rOB, hapRegex => $regex, HapLinkHf => $HapLinkHf);
+    my ($HapLinkC_Hf, $mark, $assignMethod, $modBool) = @$LocRegInfoAf;
     # assign HapID to nonHap_rOB
     ## once local region is not phased, reset mark and loads pre-defined HapLink
-    my $assignMethod;
     my $isIntraChr = $hasHap_rOB->get_mseg eq $nonHap_rOB->get_mseg;
-    if($mark !~ /^RegionPhased/){
-        $assignMethod = 'rd';
-        if($isIntraChr){
-            $HapLinkC_Href->{"$hasHapID,$hasHapID"} = 1;
-            $mark .= ';IntraChrSetHapIntra';
+    unless($modBool){
+        if($assignMethod eq 'rd'){
+            if($isIntraChr){
+                $HapLinkC_Hf->{"$hasHapID,$hasHapID"} = 1;
+                $mark .= ';IntraChrSetHapIntra';
+            }
+            else{
+                $HapLinkC_Hf->{$_} = 1 for grep /$regex/, @{$V_Href->{allHapComb}};
+                $mark .= ';InterChrSetAllAvibHap';
+            }
         }
         else{
-            $HapLinkC_Href->{$_} = 1 for grep /$regex/, @{$V_Href->{allHapComb}};
-            $mark .= ';InterChrSetAllAvibHap';
+            # uniform addition
+            if($V_Href->{uniformAddRatioForHapComb}){
+                my $add = sum(values %$HapLinkC_Hf) * $V_Href->{uniformAddRatioForHapComb};
+                $HapLinkC_Hf->{$_} += $add for grep /$regex/, @{$V_Href->{allHapComb}};
+            }
         }
-    }
-    else{
-        $assignMethod = 'ph';
-        # uniform addition
-        if($V_Href->{uniformAddRatioForHapComb}){
-            my $add = sum(values %$HapLinkC_Href) * $V_Href->{uniformAddRatioForHapComb};
-            $HapLinkC_Href->{$_} += $add for grep /$regex/, @{$V_Href->{allHapComb}};
-        }
+        # update
+        $LocRegInfoAf->[1] = $mark;
+        $LocRegInfoAf->[3] = 1;
     }
     ## select hapComb
     my $assHapComb;
-    my @HapComb = sort keys %$HapLinkC_Href;
+    my @HapComb = sort keys %$HapLinkC_Hf;
     ## if has only single HapComb, just take it
     if(scalar(@HapComb) == 1){
         $assHapComb = $HapComb[0];
         # add mark
-        $mark .= ";SoloHapComb;[$assHapComb](C:$HapLinkC_Href->{$assHapComb})";
+        $mark .= ";SoloHapComb;[$assHapComb](C:$HapLinkC_Hf->{$assHapComb})";
     }
     else{ # luck draw
         # prepare haplotype's luck-draw interval
         my $allCount = 0;
         my %hapCombDraw;
         for my $hapComb (@HapComb){
-            $allCount += $HapLinkC_Href->{$hapComb};
+            $allCount += $HapLinkC_Hf->{$hapComb};
             $hapCombDraw{$hapComb} = $allCount;
         }
         # random pick
-        my $luck_draw = int(rand($allCount) * 1E3) / 1E3; # not sprintf
+        my $luck_draw = int(rand($allCount * 1E3)) / 1E3; # not sprintf
         $assHapComb = first { $hapCombDraw{$_} > $luck_draw } @HapComb;
         # add mark
-        $mark .= ";[$_](C:$HapLinkC_Href->{$_},D:$hapCombDraw{$_})" for @HapComb;
+        $mark .= ";[$_](C:$HapLinkC_Hf->{$_},D:$hapCombDraw{$_})" for @HapComb;
         $mark .= ";RD:$luck_draw";
     }
     ## remove the pre-set hasHap-ID
