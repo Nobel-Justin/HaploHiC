@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
-$VERSION = "0.06";
-$DATE = '2019-02-16';
+$VERSION = "0.07";
+$DATE = '2019-03-10';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -77,7 +77,7 @@ sub dump_contacts{
             # read phased bam
             my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
             my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&get_contacts_idx, lastChrPairAf => \@lastChrPair]);
-            $mergeBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
+            $mergeBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, @subrtOpt);
             # contacts to count for last chr-pair, release memory
             ## here, do de-dup phased reads (in single run) (optional)
             phasePE_contacts_to_count(tag => "$mark " . join(',', @lastChrPair[0,1])) if $lastChrPair[0] ne '__NA__';

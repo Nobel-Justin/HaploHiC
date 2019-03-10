@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.14";
-$DATE = '2019-03-09';
+$VERSION = "0.15";
+$DATE = '2019-03-10';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -62,7 +62,7 @@ sub phasePE_to_contactCount{
             # read phased bam
             my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
             my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&mPosToWinIdx, lastChrPairAf => \@lastChrPair, onlyPha => 1]);
-            $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
+            $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, @subrtOpt);
             # contacts to count for last chr-pair, release memory
             ## here, do de-dup phased reads (in single run) (optional)
             &phasePE_contacts_to_count(tag => "$mark " . join(',', @lastChrPair[0,1])) if $lastChrPair[0] ne '__NA__';
@@ -75,71 +75,64 @@ sub load_phasedPE_contacts{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
-    my $pe_OB = $parm{pe_OB};
+    my $pe_OB_poolAf = $parm{pe_OB_poolAf};
     my $idxFunc = $parm{idxFunc};
     my $lastChrPairAf = $parm{lastChrPairAf};
     my $onlyPha = $parm{onlyPha} || 0; # only use phased Hi-C pair
 
-    # get chr-pos ascending sorted all mapped reads_OB
-    my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
-    # recover SuppHaplo attribute
-    $_->recover_SuppHaploAttr for @$rOB_sortAref;
-    # extract haplotype confirmed alignments
-    my @hasHaprOB = grep $_->has_SuppHaplo, @$rOB_sortAref;
-    # double check
-    if( scalar(@hasHaprOB) < 2 ){
-        warn_and_exit "<ERROR>\tPhased PE-reads doesn't have at least two haplotype confirmed alignments.\n".Dumper($pe_OB);
+    for my $pe_OB (@$pe_OB_poolAf){
+        # get chr-pos ascending sorted all mapped reads_OB
+        my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+        # recover SuppHaplo attribute
+        $_->recover_SuppHaploAttr for @$rOB_sortAref;
+        # extract haplotype confirmed alignments
+        my @hasHaprOB = grep $_->has_SuppHaplo, @$rOB_sortAref;
+        # double check
+        if( scalar(@hasHaprOB) < 2 ){
+            warn_and_exit "<ERROR>\tPhased PE-reads doesn't have at least two haplotype confirmed alignments.\n".Dumper($pe_OB);
+        }
+        # skip hapComb set by flanking region lacking phased contacts, see func 'get_rOBpair_HapLinkCount'
+        if(    $onlyPha
+            && (    $hasHaprOB[ 0]->is_fromUnPhasedRegRand
+                ||  $hasHaprOB[-1]->is_fromUnPhasedRegRand
+               )
+        ){
+            return; # do not take this PE into contact counting
+        }
+        # as sorted, so take first[0] and last[-1] one as index of contacted region
+        my (%chr, %pIdx, %hapID);
+        $chr{a}   = $hasHaprOB[ 0]->get_mseg;
+        $chr{b}   = $hasHaprOB[-1]->get_mseg;
+        return if(!exists $V_Href->{ChrThings}->{$chr{a}} || !exists $V_Href->{ChrThings}->{$chr{b}});
+        # if new chr-pair, do contacts_to_count on former chr-pair
+        if(    $chr{a} ne $lastChrPairAf->[0]
+            || $chr{b} ne $lastChrPairAf->[1]
+        ){
+            # contacts to count for last chr-pair, release memory
+            ## here, do de-dup phased reads (in single run) (optional)
+            my $tag = "$lastChrPairAf->[2] " . join(',', @$lastChrPairAf[0,1]);
+            &phasePE_contacts_to_count(tag => $tag) if $lastChrPairAf->[0] ne '__NA__';
+            # update
+            $lastChrPairAf->[0] = $chr{a};
+            $lastChrPairAf->[1] = $chr{b};
+        }
+        # go on recording
+        $pIdx{a}  = &{$idxFunc}(chr => $chr{a}, pos => $hasHaprOB[ 0]->get_mpos);
+        $pIdx{b}  = &{$idxFunc}(chr => $chr{b}, pos => $hasHaprOB[-1]->get_mpos);
+        $hapID{a} = $hasHaprOB[ 0]->get_SuppHaploStr;
+        $hapID{b} = $hasHaprOB[-1]->get_SuppHaploStr;
+        # hapID might have multiple haplotype, then make them really inter-haplotype
+        if($hapID{a} =~ /,/ || $hapID{b} =~ /,/){
+            ## i=initiative; p=passive
+            my ($i,$p) = $hapID{b} =~ /,/ ? qw/ a b / : qw/ b a /;
+            $hapID{$i} =~ s/,.+//; # arbitrary, greedy
+            $hapID{$p} =  first {$_ ne $hapID{$i}} split /,/, $hapID{$p};
+        }
+        # get PE-Info string
+        my $peInfoStr = join(';', map {( join(',', $_->get_mseg, $_->get_mpos) )} @$rOB_sortAref);
+        # record, 'peInfoStr' as key, 'accumulated count' as value
+        $V_Href->{phasePEdetails}->{$chr{a}}->{$chr{b}}->{$pIdx{a}}->{$pIdx{b}}->{"$hapID{a},$hapID{b}"}->{$peInfoStr} ++;
     }
-    # skip hapComb set by flanking region lacking phased contacts, see func 'get_rOBpair_HapLinkCount'
-    if(    $onlyPha
-        && (    $hasHaprOB[ 0]->is_fromUnPhasedRegRand
-            ||  $hasHaprOB[-1]->is_fromUnPhasedRegRand
-           )
-    ){
-        return; # do not take this PE into contact counting
-    }
-    # as sorted, so take first[0] and last[-1] one as index of contacted region
-    my (%chr, %pIdx, %hapID);
-    $chr{a}   = $hasHaprOB[ 0]->get_mseg;
-    $chr{b}   = $hasHaprOB[-1]->get_mseg;
-    return if(!exists $V_Href->{ChrThings}->{$chr{a}} || !exists $V_Href->{ChrThings}->{$chr{b}});
-    # if new chr-pair, do contacts_to_count on former chr-pair
-    if(    $chr{a} ne $lastChrPairAf->[0]
-        || $chr{b} ne $lastChrPairAf->[1]
-    ){
-        # contacts to count for last chr-pair, release memory
-        ## here, do de-dup phased reads (in single run) (optional)
-        my $tag = "$lastChrPairAf->[2] " . join(',', @$lastChrPairAf[0,1]);
-        &phasePE_contacts_to_count(tag => $tag) if $lastChrPairAf->[0] ne '__NA__';
-        # update
-        $lastChrPairAf->[0] = $chr{a};
-        $lastChrPairAf->[1] = $chr{b};
-    }
-    # go on recording
-    $pIdx{a}  = &{$idxFunc}(chr => $chr{a}, pos => $hasHaprOB[ 0]->get_mpos);
-    $pIdx{b}  = &{$idxFunc}(chr => $chr{b}, pos => $hasHaprOB[-1]->get_mpos);
-    $hapID{a} = $hasHaprOB[ 0]->get_SuppHaploStr;
-    $hapID{b} = $hasHaprOB[-1]->get_SuppHaploStr;
-    # hapID might have multiple haplotype, then make them really inter-haplotype
-    if($hapID{a} =~ /,/ || $hapID{b} =~ /,/){
-        ## i=initiative; p=passive
-        my ($i,$p) = $hapID{b} =~ /,/ ? qw/ a b / : qw/ b a /;
-        $hapID{$i} =~ s/,.+//; # arbitrary, greedy
-        $hapID{$p} =  first {$_ ne $hapID{$i}} split /,/, $hapID{$p};
-    }
-    # get PE-Info string
-    my $peInfoStr = join(';', map {( join(',', $_->get_mseg, $_->get_mpos) )} @$rOB_sortAref);
-    # record, 'peInfoStr' as key, 'accumulated count' as value
-    $V_Href->{phasePEdetails}->{$chr{a}}->{$chr{b}}->{$pIdx{a}}->{$pIdx{b}}->{"$hapID{a},$hapID{b}"}->{$peInfoStr} ++;
-    # debug of Inter
-    # if($hapID{a} eq $hapID{b}){
-    #     warn "pid\t".$pe_OB->get_pid."\n";
-    #     warn "hap\t$hapID{a},$hapID{b}\n";
-    #     warn "chr\t$chr{a},$chr{b}\n";
-    #     warn "pIdx\t$pIdx{a},$pIdx{b}\n";
-    #     warn "peInfoStr\t$peInfoStr\n";
-    #     warn Dumper($pe_OB);
-    # }
 }
 
 #--- get window index of mapping position ---

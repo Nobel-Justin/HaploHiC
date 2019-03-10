@@ -33,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.23";
-$DATE = '2019-03-03';
+$VERSION = "0.24";
+$DATE = '2019-03-10';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -888,7 +888,7 @@ sub sortSplitBamByPEcontact{
         # my $dEndSign = ($tag =~ /dEnd/ ? 1 : 0);
         my @subrtOpt = (subrtRef => \&write_peOB_to_chrPairBam,
                         subrtParmAref => [chrPairBamHf => \%chrPairBam, splitBam => $splitBam, sortTempDir => $sortTempDir]);
-        $splitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, @subrtOpt);
+        $splitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, deal_peOB_pool => 1, @subrtOpt);
         # close chr-pair bams
         $_->stop_write for values %chrPairBam;
         # load chr-pair bam and sort corrdinates to splitBam
@@ -907,23 +907,25 @@ sub write_peOB_to_chrPairBam{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
-    my $pe_OB = $parm{pe_OB};
+    my $pe_OB_poolAf = $parm{pe_OB_poolAf};
     my $chrPairBamHf = $parm{chrPairBamHf};
     my $splitBam = $parm{splitBam};
     my $sortTempDir = $parm{sortTempDir};
 
-    # sorted chr-pair
-    my @rOB = grep $splitBam->get_tag !~ /-dEnd-h/ || $_->printSAM !~ /\sXH:Z:UK\s/,
-                @{ $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') };
-    my $chrPairTag = join('-', $rOB[0]->get_mseg, $rOB[-1]->get_mseg);
-    # check chr-pair bam
-    unless(exists $chrPairBamHf->{$chrPairTag}){
-        $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => catfile($sortTempDir, "$chrPairTag.bam"));
-        $chrPairBamHf->{$chrPairTag}->start_write(samtools => $V_Href->{samtools});
-        $chrPairBamHf->{$chrPairTag}->write(content => $_) for @{ $splitBam->get_SAMheader(samtools => $V_Href->{samtools}) };
+    for my $pe_OB (@$pe_OB_poolAf){
+        # sorted chr-pair
+        my @rOB = grep $splitBam->get_tag !~ /-dEnd-h/ || $_->printSAM !~ /\sXH:Z:UK\s/,
+                    @{ $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') };
+        my $chrPairTag = join('-', $rOB[0]->get_mseg, $rOB[-1]->get_mseg);
+        # check chr-pair bam
+        unless(exists $chrPairBamHf->{$chrPairTag}){
+            $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => catfile($sortTempDir, "$chrPairTag.bam"));
+            $chrPairBamHf->{$chrPairTag}->start_write(samtools => $V_Href->{samtools});
+            $chrPairBamHf->{$chrPairTag}->write(content => $_) for @{ $splitBam->get_SAMheader(samtools => $V_Href->{samtools}) };
+        }
+        # write to chr-pair bam
+        $chrPairBamHf->{$chrPairTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
     }
-    # write to chr-pair bam
-    $chrPairBamHf->{$chrPairTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
 }
 
 #--- sort chrPair bams and write to new split bam ---

@@ -29,8 +29,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.22";
-$DATE = '2019-03-09';
+$VERSION = "0.23";
+$DATE = '2019-03-10';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -123,7 +123,7 @@ sub dEndUkHapConfirmWork{
     $V_Href->{LocRegPhased} = {}; # reset
     my @subrtOpt = (subrtRef => \&assign_dEndUKend_haplotype,
                     subrtParmAref => [tag => $tag, pairBamHref => $pairBamHref, HapLinkHf => $HapLinkHf]);
-    $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', @subrtOpt);
+    $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, @subrtOpt);
     # close getHapBam file-handle
     $_->stop_write for values %{$pairBamHref->{splitBam}};
     # write stat of phased-local-region (size and linkCount)
@@ -150,81 +150,83 @@ sub assign_dEndUKend_haplotype{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
-    my $pe_OB = $parm{pe_OB};
+    my $pe_OB_poolAf = $parm{pe_OB_poolAf};
     my $pairBamHref = $parm{pairBamHref};
     my $tag = $parm{tag};
     my $HapLinkHf = $parm{HapLinkHf};
 
-    # get chr-pos ascending sorted all mapped reads_OB
-    my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
-    # recover SuppHaplo attribute
-    $_->recover_SuppHaploAttr for @$rOB_sortAref;
-    # get haplo link count of paired rOB, <do not need sort again>
-    my $LocRegInfoAf = get_rOBpair_HapLinkCount(rOB_a => $rOB_sortAref->[0], rOB_b => $rOB_sortAref->[-1], skipSort => 1, HapLinkHf => $HapLinkHf);
-    my ($HapLinkC_Hf, $mark, $assignMethod, $modBool) = @$LocRegInfoAf;
-    # assign HapID to both nonHap_rOB
-    ## once local region is not phased, reset mark and loads pre-defined HapLink
-    my $isIntraChr = $rOB_sortAref->[0]->get_mseg eq $rOB_sortAref->[-1]->get_mseg;
-    unless($modBool){
-        if($assignMethod eq 'rd'){
-            if($isIntraChr){
-                $HapLinkC_Hf->{$_} = 1 for @{$V_Href->{intraHapComb}};
-                $mark .= ';IntraChrSetHapIntra';
+    for my $pe_OB (@$pe_OB_poolAf){
+        # get chr-pos ascending sorted all mapped reads_OB
+        my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+        # recover SuppHaplo attribute
+        $_->recover_SuppHaploAttr for @$rOB_sortAref;
+        # get haplo link count of paired rOB, <do not need sort again>
+        my $LocRegInfoAf = get_rOBpair_HapLinkCount(rOB_a => $rOB_sortAref->[0], rOB_b => $rOB_sortAref->[-1], skipSort => 1, HapLinkHf => $HapLinkHf);
+        my ($HapLinkC_Hf, $mark, $assignMethod, $modBool) = @$LocRegInfoAf;
+        # assign HapID to both nonHap_rOB
+        ## once local region is not phased, reset mark and loads pre-defined HapLink
+        my $isIntraChr = $rOB_sortAref->[0]->get_mseg eq $rOB_sortAref->[-1]->get_mseg;
+        unless($modBool){
+            if($assignMethod eq 'rd'){
+                if($isIntraChr){
+                    $HapLinkC_Hf->{$_} = 1 for @{$V_Href->{intraHapComb}};
+                    $mark .= ';IntraChrSetHapIntra';
+                }
+                else{
+                    $HapLinkC_Hf->{$_} = 1 for @{$V_Href->{allHapComb}};
+                    $mark .= ';InterChrSetAllHap';
+                }
             }
             else{
-                $HapLinkC_Hf->{$_} = 1 for @{$V_Href->{allHapComb}};
-                $mark .= ';InterChrSetAllHap';
+                # uniform addition
+                if($V_Href->{uniformAddRatioForHapComb}){
+                    my $add = sum(values %$HapLinkC_Hf) * $V_Href->{uniformAddRatioForHapComb};
+                    $HapLinkC_Hf->{$_} += $add for @{$V_Href->{allHapComb}};
+                }
             }
+            # update
+            $LocRegInfoAf->[1] = $mark;
+            $LocRegInfoAf->[3] = 1;
         }
-        else{
-            # uniform addition
-            if($V_Href->{uniformAddRatioForHapComb}){
-                my $add = sum(values %$HapLinkC_Hf) * $V_Href->{uniformAddRatioForHapComb};
-                $HapLinkC_Hf->{$_} += $add for @{$V_Href->{allHapComb}};
+        ## select hapComb
+        my $assHapComb;
+        my @HapComb = sort keys %$HapLinkC_Hf;
+        ## if has only single HapComb, just take it
+        if(scalar(@HapComb) == 1){
+            $assHapComb = $HapComb[0];
+            # add mark
+            $mark .= ";SoloHapComb;[$assHapComb](C:$HapLinkC_Hf->{$assHapComb})";
+        }
+        else{ # luck draw
+            # prepare haplotype's luck-draw interval
+            my $allCount = 0;
+            my %hapCombDraw;
+            for my $hapComb (@HapComb){
+                $allCount += $HapLinkC_Hf->{$hapComb};
+                $hapCombDraw{$hapComb} = $allCount;
             }
+            # random pick
+            my $luck_draw = int(rand($allCount * 1E3)) / 1E3; # not sprintf
+            $assHapComb = first { $hapCombDraw{$_} > $luck_draw } @HapComb;
+            # add mark
+            $mark .= ";[$_](C:$HapLinkC_Hf->{$_},D:$hapCombDraw{$_})" for @HapComb;
+            $mark .= ";RD:$luck_draw";
         }
-        # update
-        $LocRegInfoAf->[1] = $mark;
-        $LocRegInfoAf->[3] = 1;
-    }
-    ## select hapComb
-    my $assHapComb;
-    my @HapComb = sort keys %$HapLinkC_Hf;
-    ## if has only single HapComb, just take it
-    if(scalar(@HapComb) == 1){
-        $assHapComb = $HapComb[0];
-        # add mark
-        $mark .= ";SoloHapComb;[$assHapComb](C:$HapLinkC_Hf->{$assHapComb})";
-    }
-    else{ # luck draw
-        # prepare haplotype's luck-draw interval
-        my $allCount = 0;
-        my %hapCombDraw;
-        for my $hapComb (@HapComb){
-            $allCount += $HapLinkC_Hf->{$hapComb};
-            $hapCombDraw{$hapComb} = $allCount;
+        ## assign
+        my @assHapComb = split /,/, $assHapComb;
+        for my $i (0, -1){
+            $rOB_sortAref->[$i]->load_SuppHaplo(hapID => $assHapComb[$i], allele_OB => 'NULL');
+            $rOB_sortAref->[$i]->addHapIDtoOptfd; # update
+            $rOB_sortAref->[$i]->add_str_to_optfd(str => "\tXU:Z:$mark");
         }
-        # random pick
-        my $luck_draw = int(rand($allCount * 1E3)) / 1E3; # not sprintf
-        $assHapComb = first { $hapCombDraw{$_} > $luck_draw } @HapComb;
-        # add mark
-        $mark .= ";[$_](C:$HapLinkC_Hf->{$_},D:$hapCombDraw{$_})" for @HapComb;
-        $mark .= ";RD:$luck_draw";
+        # output
+        my $getHapTag = $assHapComb[0] eq $assHapComb[-1] ? "$tag.$assHapComb[0]Intra" : "$tag.hInter";
+        # write PE to getHapBam files
+        $pairBamHref->{splitBam}->{$getHapTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
+        # stat
+        my $chrTag = $isIntraChr ? 'IntraChr' : 'InterChr';
+        $V_Href->{PEsplitStat}->{"$getHapTag.$chrTag.$assignMethod"} ++;
     }
-    ## assign
-    my @assHapComb = split /,/, $assHapComb;
-    for my $i (0, -1){
-        $rOB_sortAref->[$i]->load_SuppHaplo(hapID => $assHapComb[$i], allele_OB => 'NULL');
-        $rOB_sortAref->[$i]->addHapIDtoOptfd; # update
-        $rOB_sortAref->[$i]->add_str_to_optfd(str => "\tXU:Z:$mark");
-    }
-    # output
-    my $getHapTag = $assHapComb[0] eq $assHapComb[-1] ? "$tag.$assHapComb[0]Intra" : "$tag.hInter";
-    # write PE to getHapBam files
-    $pairBamHref->{splitBam}->{$getHapTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
-    # stat
-    my $chrTag = $isIntraChr ? 'IntraChr' : 'InterChr';
-    $V_Href->{PEsplitStat}->{"$getHapTag.$chrTag.$assignMethod"} ++;
 }
 
 #--- 
