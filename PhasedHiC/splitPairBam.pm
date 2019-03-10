@@ -33,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.24";
-$DATE = '2019-03-10';
+$VERSION = "0.25";
+$DATE = '2019-03-11';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -355,10 +355,11 @@ sub PEreads_to_splitBam{
     my $pairBamHref = $parm{pairBamHref};
 
     # skip this pe if not match required chr-[pair]
+    ## this is preliminary filtration
+    my @refSegHref_para;
     if(    exists $V_Href->{mustMapChr_i}
         || exists $V_Href->{mustMapChr_j}
     ){
-        my @refSegHref_para;
         push @refSegHref_para, (a_refSegHref => $V_Href->{mustMapChr_i}->{Hf}) if exists $V_Href->{mustMapChr_i};
         push @refSegHref_para, (b_refSegHref => $V_Href->{mustMapChr_j}->{Hf}) if exists $V_Href->{mustMapChr_j};
         return unless $pe_OB->test_pair_RefSeg(@refSegHref_para);
@@ -371,6 +372,14 @@ sub PEreads_to_splitBam{
     # judge PE-reads
     my %Match_haplo;
     my ($SplitBam_tag, $Split_marker) = &judge_on_PE(pe_OB => $pe_OB, MatchHap_Href => \%Match_haplo);
+
+    # skip this pe if Hi-C links not match required chr-[pair]
+    ## this is thorough filtration
+    if(    exists $V_Href->{mustMapChr_i}
+        || exists $V_Href->{mustMapChr_j}
+    ){
+        return unless $pe_OB->testLinkRefSeg(@refSegHref_para, chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+    }
 
     # add OWN 'XH:Z:' haplo-id to 'optfd' of each reads_OB
     if( $SplitBam_tag =~ /^phMut-/ ){

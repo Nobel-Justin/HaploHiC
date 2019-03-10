@@ -12,11 +12,12 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/sEndSoloHapConfirm.pm
 ### HaploHiC::PhasedHiC::sEndSoloHapConfirm
-### VERSION = "0.09"
+### VERSION = "0.14"
 - sEndhx_get_HapLink
 - confirm_sEndSoloHapPE_HapLink
 - prepareGetHapBamObj
 - getTODOpairBamHrefArray
+- sEndSoloHapConfirmWork
 - startWriteGetHapBam
 - assign_sEndUKend_haplotype
 - findContactAnchor
@@ -24,7 +25,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/dumpContacts.pm
 ### HaploHiC::PhasedHiC::dumpContacts
-### VERSION = "0.06"
+### VERSION = "0.07"
 - dump_contacts
 - prepare
 - load_enzyme_site_list
@@ -35,9 +36,10 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/splitPairBam.pm
 ### HaploHiC::PhasedHiC::splitPairBam
-### VERSION = "0.21"
+### VERSION = "0.25"
 - divide_pairBam
 - prepareSplitBamObj
+- forkSetting
 - sourceToSplitBam
 - startWriteSplitBam
 - loadrOBfromSourceBam
@@ -55,7 +57,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/HaploDivideReads.pm
 ### HaploHiC::PhasedHiC::HaploDivideReads
-### VERSION = "0.21"
+### VERSION = "0.28"
 - return_HELP_INFO
 - Load_moduleVar_to_pubVarPool
 - Get_Cmd_Options
@@ -67,7 +69,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/phasedPEtoContact.pm
 ### HaploHiC::PhasedHiC::phasedPEtoContact
-### VERSION = "0.12"
+### VERSION = "0.15"
 - phasePE_to_contactCount
 - load_phasedPE_contacts
 - mPosToWinIdx
@@ -93,14 +95,14 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/mergeHaploReads.pm
 ### HaploHiC::PhasedHiC::mergeHaploReads
-### VERSION = "0.04"
+### VERSION = "0.05"
 - merge_haplo_reads
 - mergeReadsOfEachHapComb
 - mergeStatOfPhasedLocalRegion
 
 ## PhasedHiC/plotPhasedLocReg.pm
 ### HaploHiC::PhasedHiC::plotPhasedLocReg
-### VERSION = "0.01"
+### VERSION = "0.02"
 - return_HELP_INFO
 - Load_moduleVar_to_pubVarPool
 - Get_Cmd_Options
@@ -115,9 +117,10 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/dEndUkHapConfirm.pm
 ### HaploHiC::PhasedHiC::dEndUkHapConfirm
-### VERSION = "0.19"
+### VERSION = "0.23"
 - dEndUK_get_HapLink
 - confirm_dEndUkHapPE_HapLink
+- dEndUkHapConfirmWork
 - assign_dEndUKend_haplotype
 
 ## PhasedHiC/phasedMutWork.pm
