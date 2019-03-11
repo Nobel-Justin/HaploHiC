@@ -33,7 +33,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.25";
+$VERSION = "0.26";
 $DATE = '2019-03-11';
 
 #----- author -----
@@ -952,18 +952,25 @@ sub chrPairBamToSortSplitBam{
     $splitBam->write(content => $_) for @$SAMheadAf;
     # sort each chrPair bam and write to new split bam
     my $AbufferSize = $V_Href->{chrPairSort_peOB_AbufferSize};
+    my @subrtOpt = (subrtRef => \&write_sort_peOB_to_newSplitBam, subrtParmAref => [splitBam => $splitBam]);
+    my @chrPairTag;
+    ## intra-chr
+    push @chrPairTag, "$_-$_" for @{$V_Href->{sortedChr}};
+    ## inter-chr
     my $chrCount = scalar @{$V_Href->{sortedChr}};
     for my $i (0 .. $chrCount-1){
         my $chr_a = $V_Href->{sortedChr}->[$i];
-        for my $j ($i .. $chrCount-1){
+        for my $j ($i+1 .. $chrCount-1){
             my $chr_b = $V_Href->{sortedChr}->[$j];
-            my $chrPairTag = "$chr_a-$chr_b";
-            next unless exists $chrPairBamHf->{$chrPairTag};
-            my @subrtOpt = (subrtRef => \&write_sort_peOB_to_newSplitBam, subrtParmAref => [splitBam => $splitBam]);
-            $chrPairBamHf->{$chrPairTag}->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC',
-                                                          mark => "$mark $chrPairTag", quiet => 1, simpleLoad => 1,
-                                                          peOB_AbufferSize => $AbufferSize, deal_peOB_pool => 1, @subrtOpt);
+            push @chrPairTag, "$chr_a-$chr_b";
         }
+    }
+    ## each chrPair
+    for my $chrPairTag (@chrPairTag){
+        next unless exists $chrPairBamHf->{$chrPairTag};
+        $chrPairBamHf->{$chrPairTag}->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC',
+                                                      mark => "$mark $chrPairTag", quiet => 1, simpleLoad => 1,
+                                                      peOB_AbufferSize => $AbufferSize, deal_peOB_pool => 1, @subrtOpt);
     }
     # close new split bam
     $splitBam->stop_write;
