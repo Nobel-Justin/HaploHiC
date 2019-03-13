@@ -25,7 +25,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/dumpContacts.pm
 ### HaploHiC::PhasedHiC::dumpContacts
-### VERSION = "0.07"
+### VERSION = "0.08"
 - dump_contacts
 - prepare
 - load_enzyme_site_list

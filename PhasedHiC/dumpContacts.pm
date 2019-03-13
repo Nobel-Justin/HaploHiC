@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
-$VERSION = "0.07";
-$DATE = '2019-03-10';
+$VERSION = "0.08";
+$DATE = '2019-03-13';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -113,12 +113,25 @@ sub prepare{
 
 #--- load enzyme site position list ---
 sub load_enzyme_site_list{
-    # read gene-psl file
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $keep_all = $parm{keep_all} || 0;
+
+    # read enzyme site file from juicer database
     open (EMLIST, Try_GZ_Read($V_Href->{enzyme_site})) || die "fail read enzyme site list: $!\n";
     while(<EMLIST>){
         next if(/^#/);
         my @info = split;
         my $chr = shift @info;
+        # skip chr out of wanted list loaded if ever, if allowed
+        if(    !$keep_all
+            &&  scalar(keys %{$V_Href->{ChrThings}})
+            && !exists($V_Href->{ChrThings}->{$chr})
+        ){
+            next;
+        }
+        # record array for bisect-serach
         $V_Href->{chr2enzymePos}->{$chr} = \@info;
     }
     close EMLIST;
