@@ -619,9 +619,11 @@ sub prepare{
         $V_Href->{dump}->[$i] = \@dumpOpt;
     }
     # inform
-    stout_and_sterr "[INFO]\t".`date`
-                         ."\tdump work details:\n";
-    stout_and_sterr       "\t".join(':', @$_)."\n" for @{$V_Href->{dump}};
+    if($V_Href->{stepToStop} >= 5){
+        stout_and_sterr "[INFO]\t".`date`
+                             ."\tdump work details:\n";
+        stout_and_sterr       "\t".join(':', @$_)."\n" for @{$V_Href->{dump}};
+    }
 
     # delete possible previous results
     &delete_prev_results;
