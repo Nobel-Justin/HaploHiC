@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
-$VERSION = "0.08";
-$DATE = '2019-03-13';
+$VERSION = "0.09";
+$DATE = '2019-03-14';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -53,43 +53,45 @@ sub dump_contacts{
     # start from step after current step
     return if $V_Href->{stepToStart} > 5;
 
-    # folder, prefix, header
-    # real dumpBinSize
-    # enzyme_site (if FRAG)
-    &prepare;
-
-    # group merged bam files belonging to each tag (h[x]Intra and hInter)
-    my %tagToMergeBam;
-    for my $pairBamHref ( @{$V_Href->{PairBamFiles}} ){
-        push @{$tagToMergeBam{$_}}, $pairBamHref->{mergeBam}->{$_} for keys %{$pairBamHref->{mergeBam}};
-    }
-    # all OR specific tags, and check empty
-    my @tag = sort keys %tagToMergeBam;
-       @tag = grep /$V_Href->{dumpHapComb}/, @tag if defined $V_Href->{dumpHapComb};
-    if(@tag == 0){
-        warn_and_exit "<ERROR>\tNo Haplo-Comb selected to dump contacts by the option '-dphpcmb' ($V_Href->{dumpHapComb}).\n";
-    }
-    # deal with bam files of each tag
-    for my $tag (@tag){
-        $V_Href->{phasePEcontact} = {}; # reset contact container
-        for my $mergeBam (@{$tagToMergeBam{$tag}}){
-            my $mark = $mergeBam->get_tag;
-            # read phased bam
-            my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
-            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&get_contacts_idx, lastChrPairAf => \@lastChrPair]);
-            $mergeBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, @subrtOpt);
-            # contacts to count for last chr-pair, release memory
-            ## here, do de-dup phased reads (in single run) (optional)
-            phasePE_contacts_to_count(tag => "$mark " . join(',', @lastChrPair[0,1])) if $lastChrPair[0] ne '__NA__';
+    for my $dumpOptAf (@{$V_Href->{dump}}){
+        # dump options
+        # folder, prefix, header
+        # real dumpBinSize
+        # enzyme_site (if FRAG)
+        &prepare(dumpOptAf => $dumpOptAf);
+        # group merged bam files belonging to each tag (h[x]Intra and hInter)
+        my %tagToMergeBam;
+        for my $pairBamHref ( @{$V_Href->{PairBamFiles}} ){
+            push @{$tagToMergeBam{$_}}, $pairBamHref->{mergeBam}->{$_} for keys %{$pairBamHref->{mergeBam}};
+        }
+        # all OR specific tags, and check empty
+        my @tag = sort keys %tagToMergeBam;
+           @tag = grep /$V_Href->{dumpHapComb}/, @tag if defined $V_Href->{dumpHapComb};
+        if(@tag == 0){
+            warn_and_exit "<ERROR>\tNo Haplo-Comb selected to dump contacts by the option '-dphpcmb' ($V_Href->{dumpHapComb}).\n";
+        }
+        # deal with bam files of each tag
+        for my $tag (@tag){
+            $V_Href->{phasePEcontact} = {}; # reset contact container
+            for my $mergeBam (@{$tagToMergeBam{$tag}}){
+                my $mark = $mergeBam->get_tag;
+                # read phased bam
+                my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
+                my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&get_contacts_idx, lastChrPairAf => \@lastChrPair]);
+                $mergeBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, @subrtOpt);
+                # contacts to count for last chr-pair, release memory
+                ## here, do de-dup phased reads (in single run) (optional)
+                phasePE_contacts_to_count(tag => "$mark " . join(',', @lastChrPair[0,1])) if $lastChrPair[0] ne '__NA__';
+                # inform
+                stout_and_sterr "[INFO]\t".`date`
+                                     ."\tload contacts from $mark bam OK.\n";
+            }
+            # output contacts
+            &contacts_output(tag => $tag);
             # inform
             stout_and_sterr "[INFO]\t".`date`
-                                 ."\tload contacts from $mark bam OK.\n";
+                                 ."\tdump contacts (m:$V_Href->{dumpMode};b:$V_Href->{dumpBinSize}) from $tag phased Hi-C PE-reads OK.\n";
         }
-        # output contacts
-        &contacts_output(tag => $tag);
-        # inform
-        stout_and_sterr "[INFO]\t".`date`
-                             ."\tdump contacts (m:$V_Href->{dumpMode};b:$V_Href->{dumpBinSize}) from $tag phased Hi-C PE-reads OK.\n";
     }
 
     # stop at current step
@@ -98,6 +100,18 @@ sub dump_contacts{
 
 #--- prepare work ---
 sub prepare{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $dumpOptAf = $parm{dumpOptAf};
+
+    # dump options
+    my ($dumpMode, $dumpBinSize, $dumpHapComb) = @$dumpOptAf;
+    $V_Href->{dumpMode} = $dumpMode;
+    $V_Href->{dumpBinSize} = $dumpBinSize;
+    $V_Href->{dumpHapComb} = $dumpHapComb if $dumpHapComb ne 'all';
+    # reset global variant
+    $V_Href->{dumpBinLog} = undef;
     # folder
     my $dumpOutDir = catfile($V_Href->{outdir}, $V_Href->{dumpSubDir});
     (-d $dumpOutDir || `mkdir -p $dumpOutDir`);
@@ -170,6 +184,7 @@ sub get_dumpHeader{
     $V_Href->{dumpHeader} .= "##normMethod: $V_Href->{norm_method}\n";
     $V_Href->{dumpHeader} .= "##enzyme: $V_Href->{enzyme_type}\n"    if $V_Href->{dumpMode} eq 'FRAG';
     $V_Href->{dumpHeader} .= "##haploCount: $V_Href->{haploCount}\n" if $V_Href->{haploCount};
+    $V_Href->{dumpHeader} .= "##dumpHapComb: $V_Href->{dumpHapComb}\n" if $V_Href->{dumpHapComb};
     $V_Href->{dumpHeader} .= "##".`date`;
 }
 

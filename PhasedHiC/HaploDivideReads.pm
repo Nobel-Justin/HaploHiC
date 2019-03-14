@@ -12,7 +12,6 @@ use BioFuse::BioInfo::Objects::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::GetPath qw/ GetPath /;
 use HaploHiC::Extensions::JuicerDump qw/ load_chr_Things /;
-# use HaploHiC::PhasedHiC::phasedMutWork qw/ load_phased_VCF release_phaseMut_OB /;
 use HaploHiC::PhasedHiC::splitPairBam qw/ divide_pairBam /;
 use HaploHiC::PhasedHiC::dEndUkHapConfirm qw/ dEndUK_get_HapLink /;
 use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ sEndhx_get_HapLink /;
@@ -34,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.28";
-$DATE = '2019-03-11';
+$VERSION = "0.29";
+$DATE = '2019-03-14';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -115,14 +114,16 @@ sub return_HELP_INFO{
         -min_ct  [i]  the minimum contact count from phased pairs to confirm phased local regions. >=[5]
 
        # Options of step NO.5 #
-        -dpmode  [s]  mode of dump, 'BP' or 'FRAG'. [BP]
-        -dpbin   [s]  bin size of contacts dump. [1MB]
-                       Note: 1) BP   mode allows: 2.5MB, 1MB, 500KB, 250KB, 100KB, 50KB, 25KB, 10KB, 5KB
-                             2) FRAG mode allows: 500, 200, 100, 50, 20, 5, 2, 1
-        -dphpcmb [s]  select any haplo combination matched string set by this option. default to use all.
-                       Note: e.g., use 'Intra' to get intra-haplotype contacts of all chromosomes.
-                                   use 'Inter' to get inter-haplotype contacts of all chromosomes.
-                                   use 'h2Intra' to get only intra-h2 contacts of all chromosomes.
+        -dump    [s]  how to dump. [BP:1MB]
+                       Note: 1) format is DumpMode[:BinSize:HapComb], e.g., BP, FRAG:1, BP:500KB:h2Intra
+                             2) can be used multiple times, e.g., -dump BP:500KB -dump FRAG:1 -dump BP
+                             3) DumpMode: BP or FRAG.
+                             4) BP   BinSize: 2.5MB, [1MB], 500KB, 250KB, 100KB, 50KB, 25KB, 10KB, 5KB
+                             5) FRAG BinSize: 500, 200, 100, 50, 20, 5, 2, [1]
+                             6) HapComb is to select any haplo combination matched this string. default all.
+                                e.g., use 'Intra' to get intra-haplotype contacts of all chromosomes.
+                                      use 'Inter' to get inter-haplotype contacts of all chromosomes.
+                                      use 'h2Intra' to get only intra-h2 contacts of all chromosomes.
 
         -h|help       Display this help info.
 
@@ -150,6 +151,15 @@ sub return_HELP_INFO{
         #                      2) inputs as: -bam a_R1.bam,a_R2.bam -bam b_R1.bam,b_R2.bam
         #                      3) can applied for multiple runs: run-a, run-b, .., run-n
         # -add_r   [f]  uniform addition ratio to each haplotype combination in phased local region. [0]<=0.1
+        ## Options of step NO.5 #
+        # -dpmode  [s]  mode of dump, 'BP' or 'FRAG'. [BP]
+        # -dpbin   [s]  bin size of contacts dump. [1MB]
+        #                Note: 1) BP   mode allows: 2.5MB, 1MB, 500KB, 250KB, 100KB, 50KB, 25KB, 10KB, 5KB
+        #                      2) FRAG mode allows: 500, 200, 100, 50, 20, 5, 2, 1
+        # -dphpcmb [s]  select any haplo combination matched string set by this option. default to use all.
+        #                Note: e.g., use 'Intra' to get intra-haplotype contacts of all chromosomes.
+        #                            use 'Inter' to get inter-haplotype contacts of all chromosomes.
+        #                            use 'h2Intra' to get only intra-h2 contacts of all chromosomes.
 }
 
 #--- load variant of this module to public variant (V_Href in LoadOn.pm) ---
@@ -226,8 +236,10 @@ sub Load_moduleVar_to_pubVarPool{
             [ hapCombMinLinkForPhaReg => 5 ],
             [ uniformAddRatioForHapComb => 0 ],
             ## dump contacts
-            [ dumpMode => 'BP' ],
-            [ dumpBinSize => '1MB' ],
+            [ dump => ['BP:1MB'] ], # integrated option, mode:size:hapComb
+            [ dumpMode => undef ],
+            [ dumpBinSize => undef ],
+            [ dumpHapComb => undef ], # select HapComb (h[x]Intra and hInter) to dump contacts
             [ norm_method => 'NONE' ],
             [ dumpPEdetails => {} ], # record PE-map info and for de-dup, similar to 'phasePEdetails'
             [ dumpPEcontact => {} ], # just record counts from 'dumpPEdetails' hash, similar to 'phasePEcontact'
@@ -236,7 +248,6 @@ sub Load_moduleVar_to_pubVarPool{
             [ dumpFilePrefix => undef ], # output prefix
             [ dumpOutput => undef ], # output
             [ dumpBinLog => undef ], # output
-            [ dumpHapComb => undef ], # select HapComb (h[x]Intra and hInter) to dump contacts
             ### FRAG specific
             [ chr2enzymePos => {} ],
 
@@ -349,9 +360,10 @@ sub Get_Cmd_Options{
         "-min_ct:i" => \$V_Href->{hapCombMinLinkForPhaReg},
         "-add_r:f"  => \$V_Href->{uniformAddRatioForHapComb}, # hidden option
         ## dump contacts
-        "-dpmode:s" => \$V_Href->{dumpMode},
-        "-dpbin:s"  => \$V_Href->{dumpBinSize},
-        "-dphpcmb:s"=> \$V_Href->{dumpHapComb},
+        "-dump:s"   => \@{$V_Href->{dump}},
+        # "-dpmode:s" => \$V_Href->{dumpMode},
+        # "-dpbin:s"  => \$V_Href->{dumpBinSize},
+        # "-dphpcmb:s"=> \$V_Href->{dumpHapComb},
         # help
         "-h|help"   => \$V_Href->{HELP},
         # for debug
@@ -385,8 +397,6 @@ sub para_alert{
                         && $V_Href->{stepToStart} =~ /^[23]$/ # run at step NO.2 or NO.3
                       )
                 )
-             || $V_Href->{dumpMode} !~ /^(BP|FRAG)$/
-             || !exists $V_Href->{dump_allowBinSize}->{$V_Href->{dumpMode}}->{uc($V_Href->{dumpBinSize})}
             );
 }
 
@@ -591,6 +601,39 @@ sub prepare{
                              ."\tSelect bam files with below prefixes to operate.\n";
         stout_and_sterr       "\t$_\n" for sort keys %{$V_Href->{SelectBamPref}};
     }
+
+    # dump options
+    shift @{$V_Href->{dump}} if @{$V_Href->{dump}} > 1; # user has input, so discard default
+    for my $i (0 .. scalar(@{$V_Href->{dump}})-1){
+        my @dumpOpt = split /:/, uc($V_Href->{dump}->[$i]);
+        # check dump mode
+        if($dumpOpt[0] !~ /^(BP|FRAG)$/i){
+            warn_and_exit "<ERROR>\tDumpMode allows 'BP' or 'FRAG'.\n";
+        }
+        # check dump size
+        if(defined $dumpOpt[1]){
+            if(!exists $V_Href->{dump_allowBinSize}->{$dumpOpt[0]}->{$dumpOpt[1]}){
+                warn_and_exit "<ERROR>\tPlease use required dump BinSize.\n";
+            }
+        }
+        else{ # default
+            $dumpOpt[1] = $dumpOpt[0] eq 'BP' ? '1MB' : '1';
+        }
+        # check haplo combination
+        if(defined $dumpOpt[2]){
+            $dumpOpt[2] = lc($dumpOpt[2]);
+            $dumpOpt[2] =~  s/int/Int/;
+        }
+        else{ # default
+            $dumpOpt[2] = 'all';
+        }
+        # over-write
+        $V_Href->{dump}->[$i] = \@dumpOpt;
+    }
+    # inform
+    stout_and_sterr "[INFO]\t".`date`
+                         ."\tdump work details:\n";
+    stout_and_sterr       "\t".join(':', @$_)."\n" for @{$V_Href->{dump}};
 
     # delete possible previous results
     &delete_prev_results;
