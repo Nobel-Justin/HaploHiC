@@ -10,7 +10,7 @@ use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
-use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting /;
+use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting getTODOpairBamHrefArray /;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount get_rOBpair_HapLinkCount /;
 
 require Exporter;
@@ -21,7 +21,6 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 @ISA = qw(Exporter);
 @EXPORT = qw/
               sEndhx_get_HapLink
-              getTODOpairBamHrefArray
               prepareGetHapBamObj
               startWriteGetHapBam
               writeStatOfPhasedLocalRegion
@@ -32,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.14";
-$DATE = '2019-03-10';
+$VERSION = "0.15";
+$DATE = '2019-03-14';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -42,7 +41,6 @@ $EMAIL = 'wenlongkxm@gmail.com';
 #--------- functions in this pm --------#
 my @functoion_list = qw/
                         sEndhx_get_HapLink
-                        getTODOpairBamHrefArray
                         sEndSoloHapConfirmWork
                         confirm_sEndSoloHapPE_HapLink
                         prepareGetHapBamObj
@@ -88,9 +86,9 @@ sub confirm_sEndSoloHapPE_HapLink{
     return if $V_Href->{stepToStart} > 2;
 
     # all bams or selected
-    my @TODOpairBamHref = &getTODOpairBamHrefArray;
+    my @TODOpairBamHref = getTODOpairBamHrefArray;
     # fork manager
-    my ($pm, $fork_DO) = &forkSetting;
+    my ($pm, $fork_DO) = forkSetting;
     # load PE from sEnd-h[x].bam
     for my $pairBamHref ( @TODOpairBamHref ){
         # fork job starts
@@ -136,14 +134,6 @@ sub prepareGetHapBamObj{
         # prepare bam for final merge
         push @{$pairBamHref->{bamToMerge}->{"merge.$hapComb"}}, $pairBamHref->{splitBam}->{$getHapTag};
     }
-}
-
-#--- return Href-array of all bams or selected ---
-sub getTODOpairBamHrefArray{
-    # all bams or selected
-    return   scalar(keys %{$V_Href->{SelectBamPref}}) == 0
-           ? @{$V_Href->{PairBamFiles}}
-           : grep exists $V_Href->{SelectBamPref}->{$_->{prefix}}, @{$V_Href->{PairBamFiles}};
 }
 
 #--- main work of this module ---

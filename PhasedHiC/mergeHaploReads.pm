@@ -57,7 +57,7 @@ sub merge_haplo_reads{
     return if $V_Href->{stepToStart} > 4;
 
     # fork manager
-    my ($pm, $fork_DO) = &forkSetting;
+    my ($pm, $fork_DO) = forkSetting;
     # merge haploComb bam
     for my $pairBamHref ( @{$V_Href->{PairBamFiles}} ){
         # fork job starts

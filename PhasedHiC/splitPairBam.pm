@@ -25,6 +25,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 @ISA = qw(Exporter);
 @EXPORT = qw/
               divide_pairBam
+              getTODOpairBamHrefArray
               forkSetting
             /;
 @EXPORT_OK = qw();
@@ -33,8 +34,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.26";
-$DATE = '2019-03-11';
+$VERSION = "0.27";
+$DATE = '2019-03-14';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -44,6 +45,7 @@ $EMAIL = 'wenlongkxm@gmail.com';
 my @functoion_list = qw/
                         divide_pairBam
                         prepareSplitBamObj
+                        getTODOpairBamHrefArray
                         forkSetting
                         sourceToSplitBam
                         startWriteSplitBam
@@ -76,10 +78,12 @@ sub divide_pairBam{
     # load enzyme sites list for 'invalid PE'
     load_enzyme_site_list;
 
+    # all bams or selected
+    my @TODOpairBamHref = &getTODOpairBamHrefArray;
     # fork manager
     my ($pm, $fork_DO) = &forkSetting;
     # read paired bam files and split
-    for my $pairBamHref (@{$V_Href->{PairBamFiles}}){
+    for my $pairBamHref ( @TODOpairBamHref ){
         # fork job starts
         if($fork_DO){ $pm->start($pairBamHref->{prefix}) and next }
         eval{
@@ -152,9 +156,17 @@ sub prepareSplitBamObj{
     push @{$pairBamHref->{bamToMerge}->{"merge.hInter"}}, $pairBamHref->{splitBam}->{$_} for ("phMut-dEnd-hInter", "phMut-sEnd-hInter");
 }
 
+#--- return Href-array of all bams or selected ---
+sub getTODOpairBamHrefArray{
+    # all bams or selected
+    return   scalar(keys %{$V_Href->{SelectBamPref}}) == 0
+           ? @{$V_Href->{PairBamFiles}}
+           : grep exists $V_Href->{SelectBamPref}->{$_->{prefix}}, @{$V_Href->{PairBamFiles}};
+}
+
 #--- fork manager setting ---
 sub forkSetting{
-    my $forkNum = min($V_Href->{forkNum}, scalar(@{$V_Href->{PairBamFiles}}));
+    my $forkNum = min( $V_Href->{forkNum}, scalar(@{$V_Href->{PairBamFiles}}), scalar(keys %{$V_Href->{SelectBamPref}}) || 1E5 );
     if($forkNum > 1){
         my $pm = new Parallel::ForkManager($forkNum);
         $pm->run_on_finish(

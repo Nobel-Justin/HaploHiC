@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedMutWork';
 #----- version --------
-$VERSION = "0.14";
-$DATE = '2018-11-24';
+$VERSION = "0.15";
+$DATE = '2019-03-14';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -53,9 +53,6 @@ sub load_phased_VCF{
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $sample = $parm{sample} || undef;
-
-    # only run when starts before step4 (readsMerge)
-    return if $V_Href->{stepToStart} >= 4;
 
     my $sample_colIdx = defined $sample ? undef : 9;
     my $last_chr;
@@ -194,11 +191,13 @@ sub load_phased_VCF{
     }
 
     # write report
-    delete $V_Href->{VCFmutStat}->{i05_iniPhaMut};
-    $V_Href->{phasedMut_report} = GetPath(filekey => 'phasedMut_report');
-    open (VCFRT, Try_GZ_Write($V_Href->{phasedMut_report})) || die "fail write VCF_load.phased_mut.report: $!\n";
-    print VCFRT "$_:\t$V_Href->{VCFmutStat}->{$_}\n" for sort keys %{$V_Href->{VCFmutStat}};
-    close VCFRT;
+    unless($V_Href->{skipS01Report}){
+        delete $V_Href->{VCFmutStat}->{i05_iniPhaMut};
+        $V_Href->{phasedMut_report} = GetPath(filekey => 'phasedMut_report');
+        open (VCFRT, Try_GZ_Write($V_Href->{phasedMut_report})) || die "fail write VCF_load.phased_mut.report: $!\n";
+        print VCFRT "$_:\t$V_Href->{VCFmutStat}->{$_}\n" for sort keys %{$V_Href->{VCFmutStat}};
+        close VCFRT;
+    }
 }
 
 #--- determine read-edge distance to accept allele (has InDel) based on reference context ---
@@ -258,7 +257,7 @@ sub filterClosePhasedInDel{
 
     # output only in 1st ('splitBam') step
     my $closeInDelReport = GetPath(filekey => 'closeInDelReport');
-    open (CLIDRT, Try_GZ_Write($closeInDelReport)) || die "fail write VCF_load.phased_mut.closeInDel.list: $!\n" if $V_Href->{stepToStart} <= 1;
+    open (CLIDRT, Try_GZ_Write($closeInDelReport)) || die "fail write VCF_load.phased_mut.closeInDel.list: $!\n" unless $V_Href->{skipS01Report};
 
     for my $chr ( sort keys %{$V_Href->{PhasedMut}} ){
         my %PhaMutFilter;
@@ -312,7 +311,7 @@ sub filterClosePhasedInDel{
             }
             # alert, output only in 1st ('splitBam') step
             for my $delPhaMutOB (@delPhaMutOB){
-                print CLIDRT join("\t", @{$delPhaMutOB->get_infoSummary}) . "\n" if $V_Href->{stepToStart} <= 1;
+                print CLIDRT join("\t", @{$delPhaMutOB->get_infoSummary}) . "\n" unless $V_Href->{skipS01Report};
             }
             # become empty!
             if( scalar(@{$chrHref->{$PosIdx}}) == 0 ){
@@ -335,7 +334,7 @@ sub filterClosePhasedInDel{
         }
     }
     # output only in 1st ('splitBam') step
-    close CLIDRT if $V_Href->{stepToStart} <= 1;
+    close CLIDRT unless $V_Href->{skipS01Report};
 
     # inform
     stout_and_sterr "[INFO]\t".`date`

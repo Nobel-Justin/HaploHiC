@@ -33,7 +33,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.29";
+$VERSION = "0.30";
 $DATE = '2019-03-14';
 
 #----- author -----
@@ -151,15 +151,6 @@ sub return_HELP_INFO{
         #                      2) inputs as: -bam a_R1.bam,a_R2.bam -bam b_R1.bam,b_R2.bam
         #                      3) can applied for multiple runs: run-a, run-b, .., run-n
         # -add_r   [f]  uniform addition ratio to each haplotype combination in phased local region. [0]<=0.1
-        ## Options of step NO.5 #
-        # -dpmode  [s]  mode of dump, 'BP' or 'FRAG'. [BP]
-        # -dpbin   [s]  bin size of contacts dump. [1MB]
-        #                Note: 1) BP   mode allows: 2.5MB, 1MB, 500KB, 250KB, 100KB, 50KB, 25KB, 10KB, 5KB
-        #                      2) FRAG mode allows: 500, 200, 100, 50, 20, 5, 2, 1
-        # -dphpcmb [s]  select any haplo combination matched string set by this option. default to use all.
-        #                Note: e.g., use 'Intra' to get intra-haplotype contacts of all chromosomes.
-        #                            use 'Inter' to get inter-haplotype contacts of all chromosomes.
-        #                            use 'h2Intra' to get only intra-h2 contacts of all chromosomes.
 }
 
 #--- load variant of this module to public variant (V_Href in LoadOn.pm) ---
@@ -203,6 +194,7 @@ sub Load_moduleVar_to_pubVarPool{
             [ use_InDel => 0 ],
             [ min_InDelDist => 5 ],
             [ closeInDelSameHap => 0 ], # close-InDel must be on the same haplo (0: N, 1: Y)
+            [ skipS01Report => 0 ], # skip over-writing when use '-slbmpf' in s01
             ## reads selection
             [ mustMapChr_i => {Af => [], Hf => {}} ],
             [ mustMapChr_j => {Af => [], Hf => {}} ],
@@ -335,6 +327,7 @@ sub Get_Cmd_Options{
         ## phased-Mut
         "-use_indel"=> \$V_Href->{use_InDel},
         "-min_idd:i"=> \$V_Href->{min_InDelDist},
+        "-sks1rep"  => \$V_Href->{skipS01Report}, # hidden option
         ## reads selection
         "-chr_i:s"  => \@{$V_Href->{mustMapChr_i}->{Af}}, # hidden option
         "-chr_j:s"  => \@{$V_Href->{mustMapChr_j}->{Af}}, # hidden option
@@ -361,9 +354,6 @@ sub Get_Cmd_Options{
         "-add_r:f"  => \$V_Href->{uniformAddRatioForHapComb}, # hidden option
         ## dump contacts
         "-dump:s"   => \@{$V_Href->{dump}},
-        # "-dpmode:s" => \$V_Href->{dumpMode},
-        # "-dpbin:s"  => \$V_Href->{dumpBinSize},
-        # "-dphpcmb:s"=> \$V_Href->{dumpHapComb},
         # help
         "-h|help"   => \$V_Href->{HELP},
         # for debug
@@ -394,7 +384,7 @@ sub para_alert{
              || $V_Href->{stepToStop}  < $V_Href->{stepToStart}
              || (    scalar(@{$V_Href->{SelectBamPref}}) != 0
                   && !(    $V_Href->{stepToStart} == $V_Href->{stepToStop} # run at only one step
-                        && $V_Href->{stepToStart} =~ /^[23]$/ # run at step NO.2 or NO.3
+                        && $V_Href->{stepToStart} <= 3 # run at step NO.1, NO.2, or NO.3
                       )
                 )
             );
@@ -528,7 +518,7 @@ sub check_files{
         }
     }
 
-    # selected bam to process in step NO.2 or NO.3
+    # selected bam to process in step NO.1, NO.2, or NO.3
     my %temp;
     for my $bam_prefix ( @{$V_Href->{SelectBamPref}} ){
         unless( exists $preBamFiles{$bam_prefix} ){
@@ -592,9 +582,7 @@ sub prepare{
     }
 
     # inform selected bam
-    if(    (   $V_Href->{stepToStart} == 2
-            || $V_Href->{stepToStop}  == 3
-           )
+    if(    $V_Href->{stepToStop} <= 3
         && scalar(keys %{$V_Href->{SelectBamPref}}) != 0
     ){
         stout_and_sterr "[INFO]\t".`date`
@@ -641,38 +629,42 @@ sub prepare{
 
 # delete possible previous results
 sub delete_prev_results{
+    my $SelectBamCount = scalar(keys %{$V_Href->{SelectBamPref}});
     if( $V_Href->{stepToStart} <= 1 ){
-        `rm -rf $V_Href->{outdir}/*`;
+        if($SelectBamCount == 0){
+            `rm -rf $V_Href->{outdir}/*`;
+        }
+        else{
+            `rm -rf $V_Href->{outdir}/$_-workspace` for keys %{$V_Href->{SelectBamPref}};
+        }
     }
-    else{
-        if( $V_Href->{stepToStart} <= 2 ){
-            if( scalar(keys %{$V_Href->{SelectBamPref}}) == 0 ){
-                `rm -rf $V_Href->{outdir}/*-workspace/*phMut-sEnd-h[0-9]*.h*Int*.[bs][at]*`; # bam, statOf...
-            }
-            else{
-                `rm -rf $V_Href->{outdir}/*-workspace/$_.phMut-sEnd-h[0-9]*.h*Int*.[bs][at]*` for keys %{$V_Href->{SelectBamPref}};
-            }
+    if( $V_Href->{stepToStart} <= 2 ){
+        if($SelectBamCount == 0){
+            `rm -rf $V_Href->{outdir}/*-workspace/*phMut-sEnd-h[0-9]*.h*Int*.[bs][at]*`; # bam, statOf...
         }
-        if( $V_Href->{stepToStart} <= 3 ){
-            if(    scalar(keys %{$V_Href->{SelectBamPref}}) == 0
-                || $V_Href->{stepToStart} != 3
-            ){
-                `rm -rf $V_Href->{outdir}/*-workspace/*unknown.h*Int*.[bs][at]*`;
-            }
-            else{
-                `rm -rf $V_Href->{outdir}/*-workspace/$_.unknown.h*Int*.[bs][at]*` for keys %{$V_Href->{SelectBamPref}};
-            }
+        else{
+            `rm -rf $V_Href->{outdir}/*-workspace/$_.phMut-sEnd-h[0-9]*.h*Int*.[bs][at]*` for keys %{$V_Href->{SelectBamPref}};
         }
-        if( $V_Href->{stepToStart} <= 4 ){
-            `rm -rf $V_Href->{outdir}/*.merge.h*.bam`;
-            `rm -rf $V_Href->{outdir}/*.statOfPhasedLocReg.gz`;
+    }
+    if( $V_Href->{stepToStart} <= 3 ){
+        if(    $SelectBamCount == 0
+            || $V_Href->{stepToStart} != 3
+        ){
+            `rm -rf $V_Href->{outdir}/*-workspace/*unknown.h*Int*.[bs][at]*`;
         }
-        # if only step NO.5,
-        # it might use different setting,
-        # or else will overwirte former results.
-        if( $V_Href->{stepToStart} < 5 ){
-            `rm -rf $V_Href->{outdir}/$V_Href->{dumpSubDir}`;
+        else{
+            `rm -rf $V_Href->{outdir}/*-workspace/$_.unknown.h*Int*.[bs][at]*` for keys %{$V_Href->{SelectBamPref}};
         }
+    }
+    if( $V_Href->{stepToStart} <= 4 ){
+        `rm -rf $V_Href->{outdir}/*.merge.h*.bam`;
+        `rm -rf $V_Href->{outdir}/*.statOfPhasedLocReg.gz`;
+    }
+    # if only step NO.5,
+    # it might use different setting,
+    # or else will overwirte former results.
+    if( $V_Href->{stepToStart} < 5 ){
+        `rm -rf $V_Href->{outdir}/$V_Href->{dumpSubDir}`;
     }
 }
 

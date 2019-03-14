@@ -10,8 +10,8 @@ use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
-use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting /;
-use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ getTODOpairBamHrefArray prepareGetHapBamObj startWriteGetHapBam writeStatOfPhasedLocalRegion /;
+use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting getTODOpairBamHrefArray /;
+use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ prepareGetHapBamObj startWriteGetHapBam writeStatOfPhasedLocalRegion /;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount get_rOBpair_HapLinkCount /;
 
 require Exporter;
@@ -29,8 +29,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.23";
-$DATE = '2019-03-10';
+$VERSION = "0.24";
+$DATE = '2019-03-14';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -77,7 +77,7 @@ sub confirm_dEndUkHapPE_HapLink{
     # all bams or selected
     my @TODOpairBamHref = getTODOpairBamHrefArray;
     # fork manager
-    my ($pm, $fork_DO) = &forkSetting;
+    my ($pm, $fork_DO) = forkSetting;
     # load PE from unknown.bam
     for my $pairBamHref ( @TODOpairBamHref ){
         # fork job starts
