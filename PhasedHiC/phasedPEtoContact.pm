@@ -54,6 +54,7 @@ sub phasePE_to_contactCount{
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $tagToBamHref = $parm{tagToBamHref};
+    my $chrPair = $parm{chrPair} || undef;
 
     # load reads from each bam
     for my $tag (sort keys %$tagToBamHref){
@@ -61,7 +62,8 @@ sub phasePE_to_contactCount{
             my $mark = $hapSplitBam->get_tag;
             # read phased bam
             my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
-            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&mPosToWinIdx, lastChrPairAf => \@lastChrPair, onlyPha => 1]);
+            my $subrtParmAref = [idxFunc => \&mPosToWinIdx, lastChrPairAf => \@lastChrPair, onlyPha => 1, chrPair => $chrPair];
+            my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => $subrtParmAref);
             $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, @subrtOpt);
             # contacts to count for last chr-pair, release memory
             ## here, do de-dup phased reads (in single run) (optional)
@@ -79,7 +81,9 @@ sub load_phasedPE_contacts{
     my $idxFunc = $parm{idxFunc};
     my $lastChrPairAf = $parm{lastChrPairAf};
     my $onlyPha = $parm{onlyPha} || 0; # only use phased Hi-C pair
+    my $chrPair = $parm{chrPair};
 
+    my $lastChrPair = join(',', @$lastChrPairAf[0,1]);
     for my $pe_OB (@$pe_OB_poolAf){
         # get chr-pos ascending sorted all mapped reads_OB
         my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
@@ -104,17 +108,25 @@ sub load_phasedPE_contacts{
         $chr{a}   = $hasHaprOB[ 0]->get_mseg;
         $chr{b}   = $hasHaprOB[-1]->get_mseg;
         next if(!exists $V_Href->{ChrThings}->{$chr{a}} || !exists $V_Href->{ChrThings}->{$chr{b}});
+        # chrPair selection
+        if(    defined $chrPair
+            && "$chr{a},$chr{b}" ne $chrPair
+        ){
+            return if $lastChrPair eq $chrPair;
+            next;
+        }
         # if new chr-pair, do contacts_to_count on former chr-pair
         if(    $chr{a} ne $lastChrPairAf->[0]
             || $chr{b} ne $lastChrPairAf->[1]
         ){
             # contacts to count for last chr-pair, release memory
             ## here, do de-dup phased reads (in single run) (optional)
-            my $tag = "$lastChrPairAf->[2] " . join(',', @$lastChrPairAf[0,1]);
+            my $tag = "$lastChrPairAf->[2] $lastChrPair";
             &phasePE_contacts_to_count(tag => $tag) if $lastChrPairAf->[0] ne '__NA__';
             # update
             $lastChrPairAf->[0] = $chr{a};
             $lastChrPairAf->[1] = $chr{b};
+            $lastChrPair = join(',', @$lastChrPairAf[0,1]);
         }
         # go on recording
         $pIdx{a}  = &{$idxFunc}(chr => $chr{a}, pos => $hasHaprOB[ 0]->get_mpos);
