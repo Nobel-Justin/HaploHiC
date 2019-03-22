@@ -97,13 +97,13 @@ sub load_phasedPE_contacts{
                 ||  $hasHaprOB[-1]->is_fromUnPhasedRegRand
                )
         ){
-            return; # do not take this PE into contact counting
+            next; # do not take this PE into contact counting
         }
         # as sorted, so take first[0] and last[-1] one as index of contacted region
         my (%chr, %pIdx, %hapID);
         $chr{a}   = $hasHaprOB[ 0]->get_mseg;
         $chr{b}   = $hasHaprOB[-1]->get_mseg;
-        return if(!exists $V_Href->{ChrThings}->{$chr{a}} || !exists $V_Href->{ChrThings}->{$chr{b}});
+        next if(!exists $V_Href->{ChrThings}->{$chr{a}} || !exists $V_Href->{ChrThings}->{$chr{b}});
         # if new chr-pair, do contacts_to_count on former chr-pair
         if(    $chr{a} ne $lastChrPairAf->[0]
             || $chr{b} ne $lastChrPairAf->[1]
