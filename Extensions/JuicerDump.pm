@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::Extensions::JuicerDump';
 #----- version --------
-$VERSION = "0.10";
-$DATE = '2019-01-31';
+$VERSION = "0.11";
+$DATE = '2019-03-23';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -258,7 +258,7 @@ sub load_chr_Things{
         my ($chr, $length) = (split)[0, 1];
         # avoid comma in chr-name
         if($chr =~ /,/){
-            warn_and_exit "<ERROR>\tcannot accept chromosome with comma (',') in name ($chr).\n";
+            warn_and_exit "<ERROR>\tchromosome $chr has comma (',') in its name, not allowed.\n";
         }
         # record
         $V_Href->{ChrThings}->{$chr} = { chr=>$chr, len=>$length, turn=>$. };
