@@ -256,6 +256,11 @@ sub load_chr_Things{
     while(<CHRLEN>){
         next if(/^#/);
         my ($chr, $length) = (split)[0, 1];
+        # avoid comma in chr-name
+        if($chr =~ /,/){
+            warn_and_exit "<ERROR>\tcannot accept chromosome with comma (',') in name ($chr).\n";
+        }
+        # record
         $V_Href->{ChrThings}->{$chr} = { chr=>$chr, len=>$length, turn=>$. };
         push @{$V_Href->{sortedChr}}, $chr;
     }
