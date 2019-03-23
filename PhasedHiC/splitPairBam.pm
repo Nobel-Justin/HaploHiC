@@ -27,6 +27,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
               divide_pairBam
               getTODOpairBamHrefArray
               forkSetting
+              write_peOB_to_chrPairBam
             /;
 @EXPORT_OK = qw();
 %EXPORT_TAGS = ( DEFAULT => [qw()],
@@ -902,13 +903,13 @@ sub sortSplitBamByPEcontact{
     for my $tag (@tags){
         my $splitBam = $pairBamHref->{splitBam}->{$tag};
         # temp workspace
-        my $sortTempDir = $splitBam->get_filepath . '-sortTEMPdir';
-        `mkdir -p $sortTempDir`;
+        my $chrPairDir = $splitBam->get_filepath . '-chrPairDir';
+        `rm -rf $chrPairDir` if -d $chrPairDir;
+        `mkdir -p $chrPairDir`;
         # read $tag split bam, and write peOB to chr-pair bams
         my %chrPairBam;
-        # my $dEndSign = ($tag =~ /dEnd/ ? 1 : 0);
         my @subrtOpt = (subrtRef => \&write_peOB_to_chrPairBam,
-                        subrtParmAref => [chrPairBamHf => \%chrPairBam, splitBam => $splitBam, sortTempDir => $sortTempDir]);
+                        subrtParmAref => [chrPairBamHf => \%chrPairBam, splitBam => $splitBam, chrPairDir => $chrPairDir]);
         $splitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, deal_peOB_pool => 1, @subrtOpt);
         # close chr-pair bams
         $_->stop_write for values %chrPairBam;
@@ -916,7 +917,7 @@ sub sortSplitBamByPEcontact{
         my $mark = $splitBam->get_tag;
         &chrPairBamToSortSplitBam(chrPairBamHf => \%chrPairBam, splitBam => $splitBam, mark => $mark);
         # sweep
-        `rm -rf $sortTempDir`;
+        `rm -rf $chrPairDir`;
         # inform
         stout_and_sterr "[INFO]\t".`date`
                              ."\tsort $mark bam OK.\n";
@@ -931,8 +932,10 @@ sub write_peOB_to_chrPairBam{
     my $pe_OB_poolAf = $parm{pe_OB_poolAf};
     my $chrPairBamHf = $parm{chrPairBamHf};
     my $splitBam = $parm{splitBam};
-    my $sortTempDir = $parm{sortTempDir};
+    my $chrPairDir = $parm{chrPairDir};
+    my $sorted = $parm{sorted} || 0;
 
+    my $last_chrPairTag = '__NA__';
     for my $pe_OB (@$pe_OB_poolAf){
         # sorted chr-pair
         my @rOB = grep $splitBam->get_tag !~ /-dEnd-h/ || $_->printSAM !~ /\sXH:Z:UK\s/,
@@ -940,12 +943,16 @@ sub write_peOB_to_chrPairBam{
         my $chrPairTag = join('-', $rOB[0]->get_mseg, $rOB[-1]->get_mseg);
         # check chr-pair bam
         unless(exists $chrPairBamHf->{$chrPairTag}){
-            $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => catfile($sortTempDir, "$chrPairTag.bam"));
+            $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => catfile($chrPairDir, "$chrPairTag.bam"));
             $chrPairBamHf->{$chrPairTag}->start_write(samtools => $V_Href->{samtools});
             $chrPairBamHf->{$chrPairTag}->write(content => $_) for @{ $splitBam->get_SAMheader(samtools => $V_Href->{samtools}) };
+            # deal with last chr-pair if sorted
+            $chrPairBamHf->{$last_chrPairTag}->stop_write if $sorted;
         }
         # write to chr-pair bam
         $chrPairBamHf->{$chrPairTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
+        # record
+        $last_chrPairTag = $chrPairTag;
     }
 }
 

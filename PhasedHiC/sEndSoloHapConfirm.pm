@@ -10,7 +10,7 @@ use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
-use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting getTODOpairBamHrefArray /;
+use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting getTODOpairBamHrefArray write_peOB_to_chrPairBam /;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount get_rOBpair_HapLinkCount /;
 
 require Exporter;
@@ -53,6 +53,20 @@ my @functoion_list = qw/
 #--- assign one-side confirmed contacts PE to certain haplo-contacts ---
 ## sEnd-h[x]
 sub sEndhx_get_HapLink{
+    # split sEnd-h[x].bam to chrPair.bam (fork)
+    &sEndhxBamToChrPair;
+
+    exit;
+
+
+
+
+
+
+
+
+
+
     # load contacts from PE-reads having dual-side confirmed contacts
     ## dEnd-h[x] and [ds]End-hInter
     ## only run when starts before step4 (readsMerge)
@@ -70,6 +84,76 @@ sub sEndhx_get_HapLink{
     ## write getHapBam
     &confirm_sEndSoloHapPE_HapLink;
 }
+
+#--- split sEnd-h[x].bam to chrPair.bam (fork) ---
+sub sEndhxBamToChrPair{
+    # start from step after current step
+    return if $V_Href->{stepToStart} > 2;
+
+    # all bams or selected
+    my @TODOpairBamHref = getTODOpairBamHrefArray;
+    # fork manager
+    my ($pm, $fork_DO) = forkSetting;
+    # load PE from sEnd-h[x].bam
+    for my $pairBamHref ( @TODOpairBamHref ){
+        # fork job starts
+        if($fork_DO){ $pm->start($pairBamHref->{prefix}) and next }
+        eval{
+            # split to chrPair
+            &BamToChrPair(pairBamHref => $pairBamHref, type => 'sEndU');
+        };
+        if($@){
+            if($fork_DO){ warn $@; $pm->finish(1) }
+            else{ warn_and_exit $@; }
+        }
+        # fork job finishes
+        if($fork_DO){ $pm->finish(0) }
+    }
+    # collect fork jobs
+    if($fork_DO){ $pm->wait_all_children }
+}
+
+#--- split bam to chrPair ---
+sub BamToChrPair{
+    # options
+    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    my %parm = @_;
+    my $pairBamHref = $parm{pairBamHref};
+    my $type = $parm{type} || 'sEndU';
+
+    my @tag;
+    if($type eq 'sEndU'){
+        @tag = map {"phMut-sEnd-h$_"} (1 .. $V_Href->{haploCount});
+    }
+    elsif($type eq 'dEndU'){
+        @tag = ('unknown');
+    }
+
+    for my $tag (@tag){
+        my $splitBam = $pairBamHref->{splitBam}->{$tag};
+        # temp workspace
+        my $chrPairDir = $splitBam->get_filepath . '-chrPairDir';
+        `rm -rf $chrPairDir` if -d $chrPairDir;
+        `mkdir -p $chrPairDir`;
+        # read $tag split bam, and write peOB to chr-pair bams
+        my %chrPairBam;
+        my @subrtOpt = (subrtRef => \&write_peOB_to_chrPairBam,
+                        subrtParmAref => [chrPairBamHf => \%chrPairBam, splitBam => $splitBam, chrPairDir => $chrPairDir, sorted => 1]);
+        $splitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, deal_peOB_pool => 1, @subrtOpt);
+        # close chr-pair bams
+        $_->stop_write for values %chrPairBam;
+        # write chrPair list
+        my $chrPairList = $splitBam->get_filepath . '.chrPairList';
+        open (CPL, Try_GZ_Write($chrPairList)) || die "fail write chrPairList: $!\n";
+        print CPL join("\t", $_, $chrPairBam{$_}->get_filepath)."\n" for sort keys %chrPairBam;
+        close CPL;
+        # inform
+        my $mark = $splitBam->get_tag;
+        stout_and_sterr "[INFO]\t".`date`
+                             ."\tsplit $mark bam to chrPair bam OK.\n";
+    }
+}
+
 
 #--- confirm sEnd-h[x] PE haplotype contact ---
 ## use multiple forks
