@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.15";
-$DATE = '2019-03-10';
+$VERSION = "0.16";
+$DATE = '2019-03-22';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -64,7 +64,7 @@ sub phasePE_to_contactCount{
             my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
             my $subrtParmAref = [idxFunc => \&mPosToWinIdx, lastChrPairAf => \@lastChrPair, onlyPha => 1, chrPair => $chrPair];
             my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => $subrtParmAref);
-            $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, @subrtOpt);
+            $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, quiet => 1, @subrtOpt);
             # contacts to count for last chr-pair, release memory
             ## here, do de-dup phased reads (in single run) (optional)
             &phasePE_contacts_to_count(tag => "$mark " . join(',', @lastChrPair[0,1])) if $lastChrPair[0] ne '__NA__';
@@ -112,7 +112,7 @@ sub load_phasedPE_contacts{
         if(    defined $chrPair
             && "$chr{a},$chr{b}" ne $chrPair
         ){
-            return if $lastChrPair eq $chrPair;
+            return -1 if $lastChrPair eq $chrPair; # return stop signal
             next;
         }
         # if new chr-pair, do contacts_to_count on former chr-pair
@@ -145,6 +145,8 @@ sub load_phasedPE_contacts{
         # record, 'peInfoStr' as key, 'accumulated count' as value
         $V_Href->{phasePEdetails}->{$chr{a}}->{$chr{b}}->{$pIdx{a}}->{$pIdx{b}}->{"$hapID{a},$hapID{b}"}->{$peInfoStr} ++;
     }
+    # return normal signal
+    return 1;
 }
 
 #--- get window index of mapping position ---
