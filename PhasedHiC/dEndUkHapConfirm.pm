@@ -10,9 +10,8 @@ use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Write /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use HaploHiC::LoadOn;
-use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting getTODOpairBamHrefArray /;
-use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ prepareGetHapBamObj startWriteGetHapBam writeStatOfPhasedLocalRegion /;
-use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount get_rOBpair_HapLinkCount /;
+use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ prepareGetHapBamObj getChrPairBam chrPair_forkSetting chrPair_loadContacts chrPair_HapConfirmWork chrPair_mergeResult /;
+use HaploHiC::PhasedHiC::phasedPEtoContact qw/ get_rOBpair_HapLinkCount /;
 
 require Exporter;
 
@@ -29,8 +28,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.24";
-$DATE = '2019-03-14';
+$VERSION = "0.25";
+$DATE = '2019-03-24';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -39,120 +38,75 @@ $EMAIL = 'wenlongkxm@gmail.com';
 #--------- functions in this pm --------#
 my @functoion_list = qw/
                         dEndUK_get_HapLink
-                        confirm_dEndUkHapPE_HapLink
-                        dEndUkHapConfirmWork
-                        assign_dEndUKend_haplotype
+                        confirm_dEndU_Hap
+                        chrPair_dEndU_assignHap
                      /;
 
 #--- assign dual-side unknown PE to to certain haplo-contacts ---
 ## unknown
 sub dEndUK_get_HapLink{
-    # load contacts from PE-reads of sEndSoloHapPE getHap.bam
-    ## sEnd-h[x].h[x]Intra and sEnd-h[x].hInter
-    ## only run when starts before step4 (readsMerge)
-    if($V_Href->{stepToStart} < 4){
-        my $tagToBamHref = {};
-        my @tags = map {("phMut-sEnd-h$_.h${_}Intra", "phMut-sEnd-h$_.hInter")} ( 1 .. $V_Href->{haploCount} );
-        for my $tag ( @tags ){
-            push @{$tagToBamHref->{$tag}}, $_->{splitBam}->{$tag} for @{$V_Href->{PairBamFiles}};
-        }
-        phasePE_to_contactCount(tagToBamHref => $tagToBamHref);
-    }
-
-    # assign haplo to 'UK' end in dEndUK PE
-    ## write getHapBam
-    &confirm_dEndUkHapPE_HapLink;
-}
-
-#--- confirm unknown PE haplotype contact ---
-## use multiple forks
-sub confirm_dEndUkHapPE_HapLink{
     # prepare getHapBam name of all source bams
     my $tag = 'unknown';
     prepareGetHapBamObj(pairBamHref => $_, tag => $tag) for @{$V_Href->{PairBamFiles}};
 
-    # start from step after current step
-    return if $V_Href->{stepToStart} > 3;
-
-    # all bams or selected
-    my @TODOpairBamHref = getTODOpairBamHrefArray;
-    # fork manager
-    my ($pm, $fork_DO) = forkSetting;
-    # load PE from unknown.bam
-    for my $pairBamHref ( @TODOpairBamHref ){
-        # fork job starts
-        if($fork_DO){ $pm->start($pairBamHref->{prefix}) and next }
-        eval{
-            # confrim haplotype of 'U' end
-            &dEndUkHapConfirmWork(pairBamHref => $pairBamHref);
-        };
-        if($@){
-            if($fork_DO){ warn $@; $pm->finish(1) }
-            else{ warn_and_exit $@; }
-        }
-        # fork job finishes
-        if($fork_DO){ $pm->finish(0) }
+    # current step is in pipeline
+    if($V_Href->{stepToStart} <= 3){
+        # split dEnd-U.bam to chrPair.bam
+        ## fork at run level
+        my %preChr;
+        getChrPairBam(preChrHf => \%preChr, type => 'dEndU');
+        # assign haplo to 'UK' end in dEnd-U PE
+        ## fork at chrPair level (preChr + chrRel)
+        &confirm_dEndU_Hap(preChrHf => \%preChr);
+        # stop at current step
+        exit(0) if $V_Href->{stepToStop} == 3;
     }
-    # collect fork jobs
-    if($fork_DO){ $pm->wait_all_children }
-
-    # stop at current step
-    exit(0) if $V_Href->{stepToStop} == 3;
 }
 
-#--- main work of this module ---
-sub dEndUkHapConfirmWork{
+#--- confirm unknown PE haplotype contact ---
+## use multiple forks at preChr level
+sub confirm_dEndU_Hap{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
-    my $pairBamHref = $parm{pairBamHref};
+    my $preChrHf = $parm{preChrHf};
 
-    my $tag = 'unknown';
-    # prepare PEsplitStat
-    for my $chrTag (qw/ IntraChr InterChr /){
-        for my $assignMethod (qw/ ph rd /){
-            $V_Href->{PEsplitStat}->{"$tag.hInter.$chrTag.$assignMethod"} = 0;
-            $V_Href->{PEsplitStat}->{"$tag.h${_}Intra.$chrTag.$assignMethod"} = 0 for (1 .. $V_Href->{haploCount});
+    my @preChrOpt = map {( [$_, 'intraChr'], [$_, 'interChr'] )}
+                    grep exists $preChrHf->{$_}, @{$V_Href->{sortedChr}};
+    my $pm = chrPair_forkSetting;
+    # each chrPair of dEndU.bam
+    for my $preChrOpt ( @preChrOpt ){
+        # fork job starts
+        $pm->start(join(';',@$preChrOpt)) and next;
+        eval{
+            # options
+            my ($preChr, $chrRel) = @$preChrOpt;
+            # load phased-contact of this chrPair
+            chrPair_loadContacts(preChr => $preChr, chrRel => $chrRel, type => 'dEndU');
+            # confirm dEndU haplo of this chrPair
+            chrPair_HapConfirmWork(preChr => $preChr, chrRel => $chrRel, assignHapSubrtRef => \&chrPair_dEndU_assignHap);
+        };
+        if($@){
+            warn $@;
+            $pm->finish(1);
         }
+        # fork job finishes
+        $pm->finish(0);
     }
-    # prepare getHapBam and file-handle
-    startWriteGetHapBam(pairBamHref => $pairBamHref, tag => $tag);
-    # read unknown.bam
-    my $hapSplitBam = $pairBamHref->{splitBam}->{$tag};
-    my $HapLinkHf = { link => {}, stat => {Calculate=>0, LackChrLink=>0, QuickFind=>0} };
-    $V_Href->{LocRegPhased} = {}; # reset
-    my @subrtOpt = (subrtRef => \&assign_dEndUKend_haplotype,
-                    subrtParmAref => [tag => $tag, pairBamHref => $pairBamHref, HapLinkHf => $HapLinkHf]);
-    $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, @subrtOpt);
-    # close getHapBam file-handle
-    $_->stop_write for values %{$pairBamHref->{splitBam}};
-    # write stat of phased-local-region (size and linkCount)
-    writeStatOfPhasedLocalRegion(tag => 'unknown', hapSplitBam => $hapSplitBam);
-    # inform
-    my $mark = $hapSplitBam->get_tag;
-    my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});
-    stout_and_sterr "[INFO]\t".`date`
-                         ."\tassign haplotype to UK-end of PE-reads from $mark bam OK.\n"
-                         ."\t$mark HapLinkStat: $HapLinkStat\n";
-    # write report (3rd part)
-    ## previous contents
-    my @Content = split /\s+/, `cat $pairBamHref->{PEsplit_report}`;
-    my %Content = map {(@Content[$_,$_+1])} grep {$_%2==0 && $Content[$_] !~ /^unknown.h[I\d]/} (0 .. $#Content);
-    ## add contents of this step
-    open (PESRT, Try_GZ_Write($pairBamHref->{PEsplit_report})) || die "fail write '$pairBamHref->{prefix}' report: $!\n";
-    print PESRT "$Content[$_]\t$Content{$Content[$_]}\n" for grep {$_%2==0 && exists $Content{$Content[$_]}} (0 .. $#Content);
-    print PESRT "$_:\t$V_Href->{PEsplitStat}->{$_}\n" for grep {!exists $Content{"$_:"}} sort keys %{$V_Href->{PEsplitStat}};
-    close PESRT;
+    # collect fork jobs
+    $pm->wait_all_children;
+
+    # merge chrPair data
+    chrPair_mergeResult(type => 'dEndU');
 }
 
 #--- assign haplotype to dEndUK PE UK-end ---
-sub assign_dEndUKend_haplotype{
+sub chrPair_dEndU_assignHap{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $pe_OB_poolAf = $parm{pe_OB_poolAf};
-    my $pairBamHref = $parm{pairBamHref};
-    my $tag = $parm{tag};
+    my $getHapBamHf = $parm{getHapBamHf};
     my $HapLinkHf = $parm{HapLinkHf};
 
     for my $pe_OB (@$pe_OB_poolAf){
@@ -220,9 +174,9 @@ sub assign_dEndUKend_haplotype{
             $rOB_sortAref->[$i]->add_str_to_optfd(str => "\tXU:Z:$mark");
         }
         # output
-        my $getHapTag = $assHapComb[0] eq $assHapComb[-1] ? "$tag.$assHapComb[0]Intra" : "$tag.hInter";
+        my $getHapTag = $assHapComb[0] eq $assHapComb[-1] ? "$assHapComb[0]Intra" : "hInter";
         # write PE to getHapBam files
-        $pairBamHref->{splitBam}->{$getHapTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
+        $getHapBamHf->{$getHapTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
         # stat
         my $chrTag = $isIntraChr ? 'IntraChr' : 'InterChr';
         $V_Href->{PEsplitStat}->{"$getHapTag.$chrTag.$assignMethod"} ++;
