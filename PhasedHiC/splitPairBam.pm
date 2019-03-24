@@ -28,6 +28,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
               getTODOpairBamHrefArray
               forkSetting
               write_peOB_to_chrPairBam
+              getChrPairTagAf
             /;
 @EXPORT_OK = qw();
 %EXPORT_TAGS = ( DEFAULT => [qw()],
@@ -35,8 +36,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.27";
-$DATE = '2019-03-14';
+$VERSION = "0.28";
+$DATE = '2019-03-24';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -61,6 +62,7 @@ my @functoion_list = qw/
                         sortSplitBamByPEcontact
                         write_peOB_to_chrPairBam
                         chrPairBamToSortSplitBam
+                        getChrPairTagAf
                         write_sort_peOB_to_newSplitBam
                      /;
 
@@ -935,19 +937,20 @@ sub write_peOB_to_chrPairBam{
     my $chrPairDir = $parm{chrPairDir};
     my $sorted = $parm{sorted} || 0;
 
-    my $last_chrPairTag = '__NA__';
+    my $last_chrPairTag = undef;
     for my $pe_OB (@$pe_OB_poolAf){
         # sorted chr-pair
         my @rOB = grep $splitBam->get_tag !~ /-dEnd-h/ || $_->printSAM !~ /\sXH:Z:UK\s/,
                     @{ $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') };
-        my $chrPairTag = join('-', $rOB[0]->get_mseg, $rOB[-1]->get_mseg);
+        my $chrPairTag = join(',', $rOB[0]->get_mseg, $rOB[-1]->get_mseg); # chromosome name barely matches ','
         # check chr-pair bam
         unless(exists $chrPairBamHf->{$chrPairTag}){
-            $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => catfile($chrPairDir, "$chrPairTag.bam"));
+            my $chrPairFileTag = join('-', $rOB[0]->get_mseg, $rOB[-1]->get_mseg);
+            $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => catfile($chrPairDir, "$chrPairFileTag.bam"));
             $chrPairBamHf->{$chrPairTag}->start_write(samtools => $V_Href->{samtools});
             $chrPairBamHf->{$chrPairTag}->write(content => $_) for @{ $splitBam->get_SAMheader(samtools => $V_Href->{samtools}) };
             # deal with last chr-pair if sorted
-            $chrPairBamHf->{$last_chrPairTag}->stop_write if $sorted;
+            $chrPairBamHf->{$last_chrPairTag}->stop_write if $sorted && defined $last_chrPairTag;
         }
         # write to chr-pair bam
         $chrPairBamHf->{$chrPairTag}->write(content => join("\n",@{$pe_OB->printSAM(keep_all=>1)})."\n");
@@ -972,20 +975,9 @@ sub chrPairBamToSortSplitBam{
     # sort each chrPair bam and write to new split bam
     my $AbufferSize = $V_Href->{chrPairSort_peOB_AbufferSize};
     my @subrtOpt = (subrtRef => \&write_sort_peOB_to_newSplitBam, subrtParmAref => [splitBam => $splitBam]);
-    my @chrPairTag;
-    ## intra-chr
-    push @chrPairTag, "$_-$_" for @{$V_Href->{sortedChr}};
-    ## inter-chr
-    my $chrCount = scalar @{$V_Href->{sortedChr}};
-    for my $i (0 .. $chrCount-1){
-        my $chr_a = $V_Href->{sortedChr}->[$i];
-        for my $j ($i+1 .. $chrCount-1){
-            my $chr_b = $V_Href->{sortedChr}->[$j];
-            push @chrPairTag, "$chr_a-$chr_b";
-        }
-    }
+    my $chrPairTagAf = &getChrPairTagAf;
     ## each chrPair
-    for my $chrPairTag (@chrPairTag){
+    for my $chrPairTag (@$chrPairTagAf){
         next unless exists $chrPairBamHf->{$chrPairTag};
         $chrPairBamHf->{$chrPairTag}->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC',
                                                       mark => "$mark $chrPairTag", quiet => 1, simpleLoad => 1,
@@ -993,6 +985,24 @@ sub chrPairBamToSortSplitBam{
     }
     # close new split bam
     $splitBam->stop_write;
+}
+
+#--- get ref of chrPair array ---
+sub getChrPairTagAf{
+    my @chrPairTag;
+    ## intra-chr
+    push @chrPairTag, "$_,$_" for @{$V_Href->{sortedChr}};
+    ## inter-chr
+    my $chrCount = scalar @{$V_Href->{sortedChr}};
+    for my $i (0 .. $chrCount-1){
+        my $chr_a = $V_Href->{sortedChr}->[$i];
+        for my $j ($i+1 .. $chrCount-1){
+            my $chr_b = $V_Href->{sortedChr}->[$j];
+            push @chrPairTag, "$chr_a,$chr_b";
+        }
+    }
+    # return array-ref
+    return \@chrPairTag;
 }
 
 #--- sort pe-OB (pool) and write new split bam ---
