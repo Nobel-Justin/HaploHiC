@@ -33,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.30";
-$DATE = '2019-03-14';
+$VERSION = "0.31";
+$DATE = '2019-03-24';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -82,9 +82,6 @@ sub return_HELP_INFO{
                        Note: default 2 is for homo sapiens.
         -use_indel    use phased InDels. [disabled]
         -min_idd [i]  minimum distance to accept adjacent indels. [5]
-        -fork    [i]  to run operations with N forks in parallel. [1]
-                       Note: 1) more forks, more memory consumed.
-                             2) maximum is the number of paired bam files input.
         -st_step [i]  start wrokflow from certain step. [1]
         -ed_step [i]  stop workflow at certain step. [$V_Href->{totalStepNO}]
                        Note: step-NO. list:  1: splitBam;   2: sEndUKtoHap;  3: dEndUKtoHap; 
@@ -133,6 +130,9 @@ sub return_HELP_INFO{
      Author:
         $AUTHOR ($EMAIL)
  \n";
+        # -fork    [i]  to run operations with N forks in parallel. [25]
+        #                Note: 1) more forks, more memory consumed.
+        #                      2) maximum is the number of paired bam files input.
         # -skipddp      skip de-duplication of phased reads. [disabled]
         #                ** Note: this option ('-skipddp') is also effective in step NO.5.
         # -ucrpha  [i]  at most use such amount of flanking PhaHetMut to calculate LHDR for HaploUKPE. [5]
@@ -182,7 +182,7 @@ sub Load_moduleVar_to_pubVarPool{
             # options
             ## general
             [ haploCount => 2 ],
-            [ forkNum => 1 ],
+            [ forkNum => 25 ],
             # 1: splitBam;   2: sEndUKtoHap; 3: dEndUKtoHap;
             # 4: readsMerge; 5: dumpContacts
             [ stepToStart => 1 ],
@@ -319,7 +319,7 @@ sub Get_Cmd_Options{
         ## general
         "-enzyme:s" => \$V_Href->{enzyme_type},
         "-hapct:i"  => \$V_Href->{haploCount},
-        "-fork:i"   => \$V_Href->{forkNum},
+        "-fork:i"   => \$V_Href->{forkNum}, # hidden option
         "-st_step:i"=> \$V_Href->{stepToStart},
         "-ed_step:i"=> \$V_Href->{stepToStop},
         "-slbmpf:s" => \@{$V_Href->{SelectBamPref}}, # hidden option
