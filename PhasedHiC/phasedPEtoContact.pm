@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.16";
-$DATE = '2019-03-22';
+$VERSION = "0.17";
+$DATE = '2019-03-24';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -55,6 +55,8 @@ sub phasePE_to_contactCount{
     my %parm = @_;
     my $tagToBamHref = $parm{tagToBamHref};
     my $chrPair = $parm{chrPair} || undef;
+    my $preChr  = $parm{preChr}  || undef;
+    my $chrRel  = $parm{chrRel}  || undef;
 
     # load reads from each bam
     for my $tag (sort keys %$tagToBamHref){
@@ -62,7 +64,8 @@ sub phasePE_to_contactCount{
             my $mark = $hapSplitBam->get_tag;
             # read phased bam
             my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
-            my $subrtParmAref = [idxFunc => \&mPosToWinIdx, lastChrPairAf => \@lastChrPair, onlyPha => 1, chrPair => $chrPair];
+            my @chrSelOpt = (chrPair => $chrPair, preChr => $preChr, chrRel => $chrRel);
+            my $subrtParmAref = [idxFunc => \&mPosToWinIdx, lastChrPairAf => \@lastChrPair, onlyPha => 1, @chrSelOpt];
             my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => $subrtParmAref);
             $hapSplitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', deal_peOB_pool => 1, quiet => 1, @subrtOpt);
             # contacts to count for last chr-pair, release memory
@@ -81,7 +84,9 @@ sub load_phasedPE_contacts{
     my $idxFunc = $parm{idxFunc};
     my $lastChrPairAf = $parm{lastChrPairAf};
     my $onlyPha = $parm{onlyPha} || 0; # only use phased Hi-C pair
-    my $chrPair = $parm{chrPair};
+    my $chrPair = $parm{chrPair} || undef;
+    my $preChr  = $parm{preChr}  || undef;
+    my $chrRel  = $parm{chrRel}  || undef;
 
     my $lastChrPair = join(',', @$lastChrPairAf[0,1]);
     for my $pe_OB (@$pe_OB_poolAf){
@@ -115,6 +120,11 @@ sub load_phasedPE_contacts{
             return -1 if $lastChrPair eq $chrPair; # return stop signal
             next;
         }
+        # pre-chr selection
+        next if defined $preChr && $chr{a} ne $preChr;
+        # chr-relation selection
+        next if defined $chrRel && $chrRel eq 'intraChr' && $chr{a} ne $chr{b};
+        next if defined $chrRel && $chrRel eq 'interChr' && $chr{a} eq $chr{b};
         # if new chr-pair, do contacts_to_count on former chr-pair
         if(    $chr{a} ne $lastChrPairAf->[0]
             || $chr{b} ne $lastChrPairAf->[1]
