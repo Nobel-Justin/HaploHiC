@@ -28,7 +28,6 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
               getTODOpairBamHrefArray
               forkSetting
               write_peOB_to_chrPairBam
-              getIdxOfrOBforChrPair
               findContactAnchor
               getChrPairTagAf
             /;
