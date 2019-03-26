@@ -24,7 +24,7 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
 $VERSION = "0.25";
-$DATE = '2019-03-24';
+$DATE = '2019-03-25';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -66,7 +66,8 @@ sub confirm_dEndU_Hap{
     my %parm = @_;
     my $preChrHf = $parm{preChrHf};
 
-    my @preChrOpt = map {( [$_, 'intraChr'], [$_, 'interChr'] )}
+    my @preChrOpt = grep exists $preChrHf->{$_->[0]}->{$_->[1]}, # filter
+                    map {( [$_, 'intraChr'], [$_, 'interChr'] )}
                     grep exists $preChrHf->{$_}, @{$V_Href->{sortedChr}};
     my $pm = chrPair_forkSetting;
     # each chrPair of dEndU.bam
@@ -76,8 +77,11 @@ sub confirm_dEndU_Hap{
         eval{
             # options
             my ($preChr, $chrRel) = @$preChrOpt;
+            # only one chrPair?
+            my @chrPairTag = keys %{$preChrHf->{$preChr}->{$chrRel}};
+            my @chrPairOpt = @chrPairTag == 1 ? (chrPair => $chrPairTag[0]) : ();
             # load phased-contact of this chrPair
-            chrPair_loadContacts(preChr => $preChr, chrRel => $chrRel, type => 'dEndU');
+            chrPair_loadContacts(preChr => $preChr, chrRel => $chrRel, type => 'dEndU', @chrPairOpt);
             # confirm dEndU haplo of this chrPair
             chrPair_HapConfirmWork(preChr => $preChr, chrRel => $chrRel, assignHapSubrtRef => \&chrPair_dEndU_assignHap);
         };
