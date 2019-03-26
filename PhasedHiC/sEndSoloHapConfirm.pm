@@ -8,7 +8,7 @@ use Parallel::ForkManager;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use HaploHiC::LoadOn;
-use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting getTODOpairBamHrefArray write_peOB_to_chrPairBam getChrPairTagAf /;
+use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting getTODOpairBamHrefArray write_peOB_to_chrPairBam findContactAnchor getChrPairTagAf /;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ phasePE_to_contactCount get_rOBpair_HapLinkCount /;
 
 require Exporter;
@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.16";
-$DATE = '2019-03-24';
+$VERSION = "0.17";
+$DATE = '2019-03-25';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -51,7 +51,6 @@ my @functoion_list = qw/
                         chrPair_HapConfirmWork
                         chrPair_prepareGetHapBam
                         chrPair_sEndU_assignHap
-                        findContactAnchor
                         chrPair_PEsplitStat
                         chrPair_LocRegPhased
                         chrPair_mergeResult
@@ -161,7 +160,8 @@ sub getChrPairBam{
                 my $chrPairBamTag = "$pairBamHref->{prefix} $tag $chrPairTag";
                 $pairBamHref->{chrPairBam}->{$tag}->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $chrPairBamPath, tag => $chrPairBamTag);
                 my ($preChr) = (split /,/, $chrPairTag)[0];
-                $preChrHf->{$preChr} = 1;
+                my $chrRel = $chrPairTag =~ /^(.+),\1$/ ? 'intraChr' : 'interChr';
+                $preChrHf->{$preChr}->{$chrRel}->{$chrPairTag} = 1;
             }
             close CPL;
         }
@@ -184,9 +184,10 @@ sub BamToChrPair{
         `mkdir -p $chrPairDir`;
         # read $tag split bam, and write peOB to chr-pair bams
         my %chrPairBam;
+        my $simpleLoad = ($tag =~ /sEnd-h\d/ ? 0 : 1); # sEnd-hx might need to select end-anchor
         my @subrtOpt = (subrtRef => \&write_peOB_to_chrPairBam,
                         subrtParmAref => [chrPairBamHf => \%chrPairBam, splitBam => $splitBam, chrPairDir => $chrPairDir, sorted => 1]);
-        $splitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, deal_peOB_pool => 1, @subrtOpt);
+        $splitBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => $simpleLoad, deal_peOB_pool => 1, @subrtOpt);
         # close chr-pair bams
         $_->stop_write for values %chrPairBam;
         # write chrPair list
@@ -211,7 +212,8 @@ sub confirm_sEndU_Hap{
     my %parm = @_;
     my $preChrHf = $parm{preChrHf};
 
-    my @preChrOpt = map {( [$_, 'intraChr'], [$_, 'interChr'] )}
+    my @preChrOpt = grep exists $preChrHf->{$_->[0]}->{$_->[1]}, # filter
+                    map {( [$_, 'intraChr'], [$_, 'interChr'] )}
                     grep exists $preChrHf->{$_}, @{$V_Href->{sortedChr}};
     my $pm = &chrPair_forkSetting;
     # each chrPair of sEnd-h[x].bam
@@ -221,10 +223,13 @@ sub confirm_sEndU_Hap{
         eval{
             # options
             my ($preChr, $chrRel) = @$preChrOpt;
+            # only one chrPair?
+            my @chrPairTag = keys %{$preChrHf->{$preChr}->{$chrRel}};
+            my @chrPairOpt = @chrPairTag == 1 ? (chrPair => $chrPairTag[0]) : ();
             # load phased-contact of this chrPair
-            &chrPair_loadContacts(preChr => $preChr, chrRel => $chrRel);
+            &chrPair_loadContacts(preChr => $preChr, chrRel => $chrRel, @chrPairOpt);
             # confirm sEndU haplo of this chrPair
-            &chrPair_HapConfirmWork(preChr => $preChr, chrRel => $chrRel);
+            &chrPair_HapConfirmWork(preChr => $preChr, chrRel => $chrRel, assignHapSubrtRef => \&chrPair_sEndU_assignHap);
         };
         if($@){
             warn $@;
@@ -259,6 +264,7 @@ sub chrPair_loadContacts{
     my %parm = @_;
     my $preChr = $parm{preChr} || undef;
     my $chrRel = $parm{chrRel} || undef;
+    my $chrPair = $parm{chrPair} || undef;
     my $type = $parm{type} || 'sEndU';
 
     # load contacts from PE-reads having dual-side confirmed contacts
@@ -276,17 +282,21 @@ sub chrPair_loadContacts{
         push @{$tagToBamHref->{$tag}}, $_->{splitBam}->{$tag} for @{$V_Href->{PairBamFiles}};
     }
     # load contacts of selected chrPair
-    phasePE_to_contactCount(tagToBamHref => $tagToBamHref, preChr => $preChr, chrRel => $chrRel);
+    ## chrPair option is rare to be defined
+    $V_Href->{phasePEdetails} = {}; # reset
+    $V_Href->{phasePEcontact} = {}; # reset
+    phasePE_to_contactCount(tagToBamHref => $tagToBamHref, preChr => $preChr, chrRel => $chrRel, chrPair => $chrPair);
 }
 
 #--- confirm haplotype of U-end of given chrPair ---
+## works for both sEndU and dEndU via assignHapSubrtRef option
 sub chrPair_HapConfirmWork{
     # options
     shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $preChr = $parm{preChr} || undef;
     my $chrRel = $parm{chrRel} || undef;
-    my $assignHapSubrtRef = $parm{assignHapSubrtRef} || \&chrPair_sEndU_assignHap; # default is for sEndU, accept dEndU
+    my $assignHapSubrtRef = $parm{assignHapSubrtRef};
 
     # all bams or selected
     my @TODOpairBamHref = getTODOpairBamHrefArray;
@@ -362,7 +372,7 @@ sub chrPair_sEndU_assignHap{
         # recover SuppHaplo attribute
         $_->recover_SuppHaploAttr for @$rOB_sortAref;
         # get index of hasHap and nonHap reads_OB
-        my ($hasHapIdx, $nonHapIdx) = &findContactAnchor(rOB_sortAref => $rOB_sortAref);
+        my ($hasHapIdx, $nonHapIdx) = findContactAnchor(rOB_sortAref => $rOB_sortAref);
         my $hasHap_rOB = $rOB_sortAref->[$hasHapIdx];
         my $nonHap_rOB = $rOB_sortAref->[$nonHapIdx];
         my $hasHapID   = $hasHap_rOB->get_SuppHaploStr;
@@ -432,76 +442,6 @@ sub chrPair_sEndU_assignHap{
         # stat
         my $chrTag = $isIntraChr ? 'IntraChr' : 'InterChr';
         $V_Href->{PEsplitStat}->{"$getHapTag.$chrTag.$assignMethod"} ++;
-    }
-}
-
-#--- find the index in rOB_sortArray of hasHap and nonHap reads_OB ---
-sub findContactAnchor{
-    # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
-    my %parm = @_;
-    my $rOB_sortAref = $parm{rOB_sortAref};
-
-    my (@hasHapIdx, @nonHapIdx);
-    for my $i (0 .. scalar(@$rOB_sortAref)-1){
-        if($rOB_sortAref->[$i]->has_SuppHaplo){
-            push @hasHapIdx, $i;
-        }
-        else{
-            push @nonHapIdx, $i;
-        }
-    }
-    # find proper index of hasHap_rOB and nonHap_rOB
-    if( $hasHapIdx[-1] < $nonHapIdx[0] ){
-        return ($hasHapIdx[0], $nonHapIdx[-1]);
-    }
-    elsif( $nonHapIdx[-1] < $hasHapIdx[0] ){
-        return ($hasHapIdx[-1], $nonHapIdx[0]);
-    }
-    else{
-        my $hasHaprOB_F = $rOB_sortAref->[$hasHapIdx[0]];
-        my $hasHaprOB_L = $rOB_sortAref->[$hasHapIdx[-1]];
-        my $nonHaprOB_F = $rOB_sortAref->[$nonHapIdx[0]];
-        my $nonHaprOB_L = $rOB_sortAref->[$nonHapIdx[-1]];
-        my $hFnLsameChr = ($hasHaprOB_F->get_mseg eq $nonHaprOB_L->get_mseg);
-        my $hLnFsameChr = ($hasHaprOB_L->get_mseg eq $nonHaprOB_F->get_mseg);
-        # same chr
-        if( $hFnLsameChr && $hLnFsameChr ){
-            # larger pos gap
-            if(   abs($hasHaprOB_F->get_mpos - $nonHaprOB_L->get_mpos)
-                > abs($hasHaprOB_L->get_mpos - $nonHaprOB_F->get_mpos)
-            ){
-                return ($hasHapIdx[0], $nonHapIdx[-1]);
-            }
-            else{
-                return ($hasHapIdx[-1], $nonHapIdx[0]);
-            }
-        }
-        # diff chr (solo)
-        elsif( $hFnLsameChr && !$hLnFsameChr ){
-            return ($hasHapIdx[-1], $nonHapIdx[0]);
-        }
-        elsif( !$hFnLsameChr && $hLnFsameChr ){
-            return ($hasHapIdx[0], $nonHapIdx[-1]);
-        }
-        # diff chr (both)
-        else{
-            # longer mapped length
-            if(   $hasHaprOB_F->get_mReadLen + $nonHaprOB_L->get_mReadLen
-                > $hasHaprOB_L->get_mReadLen + $nonHaprOB_F->get_mReadLen
-            ){
-                return ($hasHapIdx[0], $nonHapIdx[-1]);
-            }
-            else{
-                return ($hasHapIdx[-1], $nonHapIdx[0]);
-            }
-        }
-        # if( $nonHaprOB_F->is_suppmap ){ # avoid supp-map nonHap alignment, deprecated
-        #     return ($hasHapIdx[0], $nonHapIdx[-1]);
-        # }
-        # else{
-        #     return ($hasHapIdx[-1], $nonHapIdx[0]);
-        # }
     }
 }
 
@@ -627,7 +567,7 @@ sub mergeChrPairResult{
         # sweep chrPair folder and list
         my $chrPairList = $pairBamHref->{splitBam}->{$tag}->get_filepath . '.chrPairList';
         my $chrPairDir  = $pairBamHref->{splitBam}->{$tag}->get_filepath . '-chrPairDir';
-        # `rm -rf $chrPairDir $chrPairList`; # debug
+        `rm -rf $chrPairDir $chrPairList`;
         # inform
         stout_and_sterr "[INFO]\t".`date`
                              ."\tmerge getHap bam files OK.\n"
