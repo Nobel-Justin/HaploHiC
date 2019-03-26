@@ -33,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.31";
-$DATE = '2019-03-24';
+$VERSION = "0.32";
+$DATE = '2019-03-26';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -643,19 +643,23 @@ sub delete_prev_results{
     if( $V_Href->{stepToStart} <= 2 ){
         if($SelectBamCount == 0){
             `rm -rf $V_Href->{outdir}/*-workspace/*phMut-sEnd-h[0-9]*.[hs][0-9It]*`; # bam, statOf...
+            `rm -rf $V_Href->{outdir}/*-workspace/*phMut-sEnd-h[0-9]*.*chrPair*`; # chrPair dir, list
         }
         else{
             `rm -rf $V_Href->{outdir}/*-workspace/$_.phMut-sEnd-h[0-9]*.[hs][0-9It]*` for keys %{$V_Href->{SelectBamPref}};
+            `rm -rf $V_Href->{outdir}/*-workspace/$_.phMut-sEnd-h[0-9]*.*chrPair*` for keys %{$V_Href->{SelectBamPref}};
         }
     }
     if( $V_Href->{stepToStart} <= 3 ){
         if(    $SelectBamCount == 0
             || $V_Href->{stepToStart} != 3
         ){
-            `rm -rf $V_Href->{outdir}/*-workspace/*unknown.[hs][0-9It]*`;
+            `rm -rf $V_Href->{outdir}/*-workspace/*unknown.[hs][0-9It]*`; # bam, statOf...
+            `rm -rf $V_Href->{outdir}/*-workspace/*unknown.*chrPair*`; # chrPair dir, list
         }
         else{
             `rm -rf $V_Href->{outdir}/*-workspace/$_.unknown.[hs][0-9It]*` for keys %{$V_Href->{SelectBamPref}};
+            `rm -rf $V_Href->{outdir}/*-workspace/$_.unknown.*chrPair*` for keys %{$V_Href->{SelectBamPref}};
         }
     }
     if( $V_Href->{stepToStart} <= 4 ){
