@@ -71,18 +71,19 @@ sub sEndhx_get_HapLink{
         &prepareGetHapBamObj(pairBamHref => $_, tag => $tag) for @{$V_Href->{PairBamFiles}};
     }
 
-    # current step is in pipeline
-    if($V_Href->{stepToStart} <= 2){
-        # split sEnd-h[x].bam to chrPair.bam
-        ## fork at run level
-        my %preChr;
-        &getChrPairBam(preChrHf => \%preChr, type => 'sEndU');
-        # assign haplo to 'UK' end in sEnd-h[x] PE
-        ## fork at chrPair level (preChr + chrRel)
-        &confirm_sEndU_Hap(preChrHf => \%preChr);
-        # stop at current step
-        exit(0) if $V_Href->{stepToStop} == 2;
-    }
+    # start from step after current step
+    return if $V_Href->{stepToStart} > 2;
+
+    # split sEnd-h[x].bam to chrPair.bam
+    ## fork at run level
+    my %preChr;
+    &getChrPairBam(preChrHf => \%preChr, type => 'sEndU');
+    # assign haplo to 'UK' end in sEnd-h[x] PE
+    ## fork at chrPair level (preChr + chrRel)
+    &confirm_sEndU_Hap(preChrHf => \%preChr);
+
+    # stop at current step
+    exit(0) if $V_Href->{stepToStop} == 2;
 }
 
 #--- prepare getHapBam object from hapSplit.bam ---

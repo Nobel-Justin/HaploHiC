@@ -44,18 +44,19 @@ sub dEndUK_get_HapLink{
     my $tag = 'unknown';
     prepareGetHapBamObj(pairBamHref => $_, tag => $tag) for @{$V_Href->{PairBamFiles}};
 
-    # current step is in pipeline
-    if($V_Href->{stepToStart} <= 3){
-        # split dEnd-U.bam to chrPair.bam
-        ## fork at run level
-        my %preChr;
-        getChrPairBam(preChrHf => \%preChr, type => 'dEndU');
-        # assign haplo to 'UK' end in dEnd-U PE
-        ## fork at chrPair level (preChr + chrRel)
-        &confirm_dEndU_Hap(preChrHf => \%preChr);
-        # stop at current step
-        exit(0) if $V_Href->{stepToStop} == 3;
-    }
+    # start from step after current step
+    return if $V_Href->{stepToStart} > 3;
+
+    # split dEnd-U.bam to chrPair.bam
+    ## fork at run level
+    my %preChr;
+    getChrPairBam(preChrHf => \%preChr, type => 'dEndU');
+    # assign haplo to 'UK' end in dEnd-U PE
+    ## fork at chrPair level (preChr + chrRel)
+    &confirm_dEndU_Hap(preChrHf => \%preChr);
+
+    # stop at current step
+    exit(0) if $V_Href->{stepToStop} == 3;
 }
 
 #--- confirm unknown PE haplotype contact ---

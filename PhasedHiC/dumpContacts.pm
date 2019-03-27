@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dumpContacts';
 #----- version --------
-$VERSION = "0.09";
-$DATE = '2019-03-14';
+$VERSION = "0.10";
+$DATE = '2019-03-27';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -152,7 +152,7 @@ sub load_enzyme_site_list{
 
     # inform
     stout_and_sterr "[INFO]\t".`date`
-                         ."\tread enzyme site DONE\n";
+                         ."\tread enzyme site DONE.\n" unless $V_Href->{skipS01Report};
 }
 
 #--- get contact idx in given mode ---

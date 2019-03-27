@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedMutWork';
 #----- version --------
-$VERSION = "0.15";
-$DATE = '2019-03-14';
+$VERSION = "0.16";
+$DATE = '2019-03-27';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -177,7 +177,7 @@ sub load_phased_VCF{
 
     # inform
     stout_and_sterr "[INFO]\t".`date`
-                         ."\tload phased mutations from VCF OK.\n";
+                         ."\tload phased mutations from VCF OK.\n" unless $V_Href->{skipS01Report};
 
     # InDel things
     if( $V_Href->{use_InDel} ){
@@ -185,7 +185,7 @@ sub load_phased_VCF{
         read_fasta_file(FaFile=>$V_Href->{GenomeRefFa}, subrtRef=>\&GetPhaseMutEdgeDist);
         # inform
         stout_and_sterr "[INFO]\t".`date`
-                             ."\tdetermine read-edge distance for InDel alleles OK.\n";
+                             ."\tdetermine read-edge distance for InDel alleles OK.\n" unless $V_Href->{skipS01Report};
         # discard close phased InDels
         &filterClosePhasedInDel;
     }
@@ -338,7 +338,7 @@ sub filterClosePhasedInDel{
 
     # inform
     stout_and_sterr "[INFO]\t".`date`
-                         ."\tfilter close-InDel alleles with hom-InDel alleles OK.\n";
+                         ."\tfilter close-InDel alleles with hom-InDel alleles OK.\n" unless $V_Href->{skipS01Report};
 }
 
 #--- find PhasedMut(s) by given pos/region ---

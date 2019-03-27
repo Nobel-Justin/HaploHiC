@@ -35,7 +35,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/dumpContacts.pm
 ### HaploHiC::PhasedHiC::dumpContacts
-### VERSION = "0.09"
+### VERSION = "0.10"
 - dump_contacts
 - prepare
 - load_enzyme_site_list
@@ -46,7 +46,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/splitPairBam.pm
 ### HaploHiC::PhasedHiC::splitPairBam
-### VERSION = "0.29"
+### VERSION = "0.30"
 - divide_pairBam
 - prepareSplitBamObj
 - getTODOpairBamHrefArray
@@ -138,7 +138,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/phasedMutWork.pm
 ### HaploHiC::PhasedHiC::phasedMutWork
-### VERSION = "0.15"
+### VERSION = "0.16"
 - load_phased_VCF
 - GetPhaseMutEdgeDist
 - release_phaseMut_OB

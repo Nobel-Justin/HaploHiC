@@ -37,8 +37,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.29";
-$DATE = '2019-03-25';
+$VERSION = "0.30";
+$DATE = '2019-03-27';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -78,21 +78,21 @@ sub divide_pairBam{
     # start from step after current step
     return if $V_Href->{stepToStart} > 1;
 
-    # phased Het-mutation
-    load_phased_VCF;
-
-    # load enzyme sites list for 'invalid PE'
-    load_enzyme_site_list;
-
     # all bams or selected
     my @TODOpairBamHref = &getTODOpairBamHrefArray;
     # fork manager
     my ($pm, $fork_DO) = &forkSetting;
     # read paired bam files and split
-    for my $pairBamHref ( @TODOpairBamHref ){
+    for my $i ( 0 .. $#TODOpairBamHref ){
+        my $pairBamHref = $TODOpairBamHref[$i];
         # fork job starts
         if($fork_DO){ $pm->start($pairBamHref->{prefix}) and next }
         eval{
+            # phased Het-mutation
+            $V_Href->{skipS01Report} = 1 if $i != 0; # only the first pairBam produce the mutation report
+            load_phased_VCF;
+            # load enzyme sites list for 'invalid PE'
+            load_enzyme_site_list;
             # distribute Hi-C PE-reads from source pairBam to different splitBam
             &sourceToSplitBam(pairBamHref => $pairBamHref);
             # sort splitBam, sEnd and unknown
@@ -107,11 +107,6 @@ sub divide_pairBam{
     }
     # collect fork jobs
     if($fork_DO){ $pm->wait_all_children }
-
-    # release memory
-    $V_Href->{PhasedMut} = undef;
-    ## reload in HaploHiC::PhasedHiC::dumpContacts if need
-    $V_Href->{chr2enzymePos} = undef;
 
     # stop at current step
     exit(0) if $V_Href->{stepToStop} == 1;
