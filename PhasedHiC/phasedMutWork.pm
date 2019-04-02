@@ -201,7 +201,7 @@ sub load_phased_VCF{
 }
 
 #--- determine read-edge distance to accept allele (has InDel) based on reference context ---
-## default is alleleSeqLen + delta, the delta is the InDelSeq's own-unit repTime, which represents the local repeatability
+## default is alleleSeqLen + delta, the delta is the InDelSeq's own-unit repTime (>=2), which should represent the local repeatability
 ## insertion: p3_Dist = default + refRepPartLen
 ## deletion:  p3_Dist = default + refRepPartLen - delLen
 sub GetPhaseMutEdgeDist{
@@ -224,7 +224,7 @@ sub GetPhaseMutEdgeDist{
                 for my $hapID (@$hapAref){
                     my $alleleSeq = $PhasedMut_OB->get_hapInfo(haplo_ID=>$hapID)->[1];
                     my ($repTime, $repUnit) = getStrRepUnit(str=>$alleleSeq, mode=>'w');
-                    my $p3_Dist = length($alleleSeq) + $repTime;
+                    my $p3_Dist = length($alleleSeq) + max($repTime, 2);
                     if( $refContext =~ /^($repUnit)+/i ){
                         $p3_Dist += length($&);
                         $p3_Dist -= length($alleleSeq) if( $type eq 'del' );
