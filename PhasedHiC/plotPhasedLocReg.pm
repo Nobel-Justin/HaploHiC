@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::plotPhasedLocReg';
 #----- version --------
-$VERSION = "0.02";
-$DATE = '2019-02-25';
+$VERSION = "0.04";
+$DATE = '2019-04-06';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -72,6 +72,7 @@ sub return_HELP_INFO{
         -tmr_pc  [f]  ratio for unilateral trimming from phased link counts. [0.01]
         -amt_fc  [s]  manually set the top of amount. [0]
         -rgb     [s]  rgb of heatmap color. ['255,0,0']
+        -add_r   [f]  uniform addition ratio in phased local region. [0]<=0.1
 
         -h|help       Display this help info.
 
@@ -112,6 +113,7 @@ sub Load_moduleVar_to_pubVarPool{
             # intermediate variants
             [ statFiles => [] ],
             [ localRegionUnit => undef ],
+            [ uniformAddRatio => 0 ],
             [ locRegInfo => {} ],
             [ maxLocRegUnitTime => 0 ],
             [ maxPhasedLinkC => 0 ],
@@ -180,13 +182,15 @@ sub prepare{
     if(@{$V_Href->{statFiles}} == 0){
         warn_and_exit "<ERROR>\tcannot find any statOfPhasedLocReg.gz file.\n";
     }
-    # get localRegionUnit from header
-    chomp(my $header = `zcat $V_Href->{statFiles}->[0] | grep '^##LocalRegionUnit' | head -1`);
-    if($header =~ /LocalRegionUnit:\s+(\S+)/){
-        $V_Href->{localRegionUnit} = $1;
-    }
-    else{
-        warn_and_exit "<ERROR>\tcannot get localRegionUnit from header of statOfPhasedLocReg.gz file.\n";
+    # get basic info from header
+    for my $key (qw/ localRegionUnit uniformAddRatio /){
+        chomp(my $header = `zcat $V_Href->{statFiles}->[0] | grep -i '^##$key' | head -1`);
+        if($header =~ /$key:\s+(\S+)/i){
+            $V_Href->{$key} = $1;
+        }
+        else{
+            warn_and_exit "<ERROR>\tcannot get $key from header of statOfPhasedLocReg.gz file.\n";
+        }
     }
     # color
     if($V_Href->{color_rgb} =~ /^(\d+),(\d+),(\d+)$/){
@@ -233,16 +237,31 @@ sub loadLocRegInfo{
             next if exists $V_Href->{keep_hapDivTag_regex} && &filter_hapDivTag(hapDivTag => $hapDivTag);
             # chr-pair
             next if exists $V_Href->{keep_chr_regex} && &filter_chrPair(chrPair => $chrPair);
-            # hap-comb
-            if(exists $V_Href->{keep_hap_regex}){
-                $Amount = 0;
-                for my $hapCombC (split /;/, $hapCombCount){
-                    if($hapCombC =~ /(h\d+,h\d+):(\d+)/){
-                        $Amount += $2 unless &filter_hapComb(hapComb => $1);
+            # add_ratio reduce
+            if($V_Href->{uniformAddRatio} != 0){
+                my @hapCombC = split /;/, $hapCombCount;
+                # set as before adding
+                $phasedLinkC /= (1 + $V_Href->{uniformAddRatio} * scalar(@hapCombC));
+                my $addC = $phasedLinkC * $V_Href->{uniformAddRatio};
+                $hapCombCount = '';
+                for my $hapCombC (@hapCombC){
+                    if($hapCombC =~ /(h\d+,h\d+):([\d\.]+)/){
+                        my $origC = $2 - $addC;
+                        $hapCombCount .= "$1:$origC;" if $origC != 0;
                     }
                 }
             }
-            next if $Amount == 0;
+            # hap-comb
+            if(exists $V_Href->{keep_hap_regex}){
+                my $matchHapBool = 0;
+                for my $hapCombC (split /;/, $hapCombCount){
+                    if($hapCombC =~ /(h\d+,h\d+):([\d\.]+)/){
+                        $matchHapBool ||= &filter_hapComb(hapComb => $1);
+                    }
+                    last if $matchHapBool;
+                }
+                next unless $matchHapBool;
+            }
             # record
             my $unitTime = sprintf "%.2f", $locRegSize / $V_Href->{localRegionUnit};
             $V_Href->{locRegInfo}->{$unitTime}->{$phasedLinkC} += $Amount;

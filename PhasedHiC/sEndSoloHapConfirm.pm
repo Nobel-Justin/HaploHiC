@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.18";
-$DATE = '2019-04-05';
+$VERSION = "0.19";
+$DATE = '2019-04-06';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -683,6 +683,7 @@ sub writeMergeLocRegPhased{
 
     open (LRP, Try_GZ_Write($LocRegPhased)) || die "fail to write statOfPhasedLocReg: $!\n";
     print LRP "##LocalRegionUnit: $localRegionUnit\n";
+    print LRP "##UniformAddRatio: $V_Href->{uniformAddRatioForHapComb}\n";
     print LRP join("\t", '#Tag', 'ChrPair', 'LocalRegionSize', 'PhasedContactsCount', 'Details', 'Amount') . "\n";
     for my $ChrPair (sort keys %{$V_Href->{LocRegPhased}}){
         for my $LocRegSize (sort {$a<=>$b} keys %{$V_Href->{LocRegPhased}->{$ChrPair}}){

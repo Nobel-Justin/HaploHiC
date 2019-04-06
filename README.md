@@ -12,7 +12,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/sEndSoloHapConfirm.pm
 ### HaploHiC::PhasedHiC::sEndSoloHapConfirm
-### VERSION = "0.17"
+### VERSION = "0.19"
 - sEndhx_get_HapLink
 - prepareGetHapBamObj
 - getChrPairBam
@@ -83,7 +83,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/phasedPEtoContact.pm
 ### HaploHiC::PhasedHiC::phasedPEtoContact
-### VERSION = "0.17"
+### VERSION = "0.18"
 - phasePE_to_contactCount
 - load_phasedPE_contacts
 - mPosToWinIdx
@@ -116,7 +116,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/plotPhasedLocReg.pm
 ### HaploHiC::PhasedHiC::plotPhasedLocReg
-### VERSION = "0.02"
+### VERSION = "0.04"
 - return_HELP_INFO
 - Load_moduleVar_to_pubVarPool
 - Get_Cmd_Options
@@ -131,14 +131,14 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/dEndUkHapConfirm.pm
 ### HaploHiC::PhasedHiC::dEndUkHapConfirm
-### VERSION = "0.25"
+### VERSION = "0.26"
 - dEndUK_get_HapLink
 - confirm_dEndU_Hap
 - chrPair_dEndU_assignHap
 
 ## PhasedHiC/phasedMutWork.pm
 ### HaploHiC::PhasedHiC::phasedMutWork
-### VERSION = "0.16"
+### VERSION = "0.17"
 - load_phased_VCF
 - GetPhaseMutEdgeDist
 - release_phaseMut_OB
