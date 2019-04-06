@@ -23,8 +23,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.25";
-$DATE = '2019-03-25';
+$VERSION = "0.26";
+$DATE = '2019-04-05';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -115,11 +115,15 @@ sub chrPair_dEndU_assignHap{
         # recover SuppHaplo attribute
         $_->recover_SuppHaploAttr for @$rOB_sortAref;
         # get haplo link count of paired rOB, <do not need sort again>
-        my $LocRegInfoAf = get_rOBpair_HapLinkCount(rOB_a => $rOB_sortAref->[0], rOB_b => $rOB_sortAref->[-1], skipSort => 1, HapLinkHf => $HapLinkHf);
+        my $rOB_a = $rOB_sortAref->[0];
+        my $rOB_b = $rOB_sortAref->[-1];
+        my $LocRegInfoAf = get_rOBpair_HapLinkCount(rOB_a => $rOB_a, rOB_b => $rOB_b, skipSort => 1, HapLinkHf => $HapLinkHf);
         my ($HapLinkC_Hf, $mark, $assignMethod, $modBool) = @$LocRegInfoAf;
         # assign HapID to both nonHap_rOB
         ## once local region is not phased, reset mark and loads pre-defined HapLink
-        my $isIntraChr = $rOB_sortAref->[0]->get_mseg eq $rOB_sortAref->[-1]->get_mseg;
+        my $mSeg_a = $rOB_a->get_mseg;
+        my $mSeg_b = $rOB_b->get_mseg;
+        my $isIntraChr = $mSeg_a eq $mSeg_b;
         unless($modBool){
             if($assignMethod eq 'rd'){
                 if($isIntraChr){
@@ -141,6 +145,13 @@ sub chrPair_dEndU_assignHap{
             # update
             $LocRegInfoAf->[1] = $mark;
             $LocRegInfoAf->[3] = 1;
+        }
+        ## phased local-region stat
+        if($assignMethod eq 'ph'){
+            my ($FlankSize) = ($mark =~ /^RegionPhased;\(fSize:(\d+),/);
+            my $HapLinkCountSum = sum(values %$HapLinkC_Hf);
+            my $HapLinkDetails = join(';', map {"$_:$HapLinkC_Hf->{$_}"} sort keys %$HapLinkC_Hf);
+            $V_Href->{LocRegPhased}->{"$mSeg_a,$mSeg_b"}->{ ($FlankSize*2) }->{$HapLinkCountSum}->{$HapLinkDetails} ++;
         }
         ## select hapComb
         my $assHapComb;

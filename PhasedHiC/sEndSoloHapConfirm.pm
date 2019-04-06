@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.17";
-$DATE = '2019-03-25';
+$VERSION = "0.18";
+$DATE = '2019-04-05';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -379,12 +379,16 @@ sub chrPair_sEndU_assignHap{
         my $hasHapID   = $hasHap_rOB->get_SuppHaploStr;
         # get haplo link count of paired rOB, <needs to sort again>
         ## only keep pre-set hapID combination
+        my $rOB_a = $hasHapIdx < $nonHapIdx ?   $hasHap_rOB : $nonHap_rOB;
+        my $rOB_b = $hasHapIdx > $nonHapIdx ?   $hasHap_rOB : $nonHap_rOB;
         my $regex = $hasHapIdx < $nonHapIdx ? "^$hasHapID," : ",$hasHapID\$";
-        my $LocRegInfoAf = get_rOBpair_HapLinkCount(rOB_a => $hasHap_rOB, rOB_b => $nonHap_rOB, hapRegex => $regex, HapLinkHf => $HapLinkHf);
+        my $LocRegInfoAf = get_rOBpair_HapLinkCount(rOB_a => $rOB_a, rOB_b => $rOB_b, skipSort => 1, HapLinkHf => $HapLinkHf, hapRegex => $regex);
         my ($HapLinkC_Hf, $mark, $assignMethod, $modBool) = @$LocRegInfoAf;
         # assign HapID to nonHap_rOB
         ## once local region is not phased, reset mark and loads pre-defined HapLink
-        my $isIntraChr = $hasHap_rOB->get_mseg eq $nonHap_rOB->get_mseg;
+        my $mSeg_a = $rOB_a->get_mseg;
+        my $mSeg_b = $rOB_b->get_mseg;
+        my $isIntraChr = $mSeg_a eq $mSeg_b;
         unless($modBool){
             if($assignMethod eq 'rd'){
                 if($isIntraChr){
@@ -406,6 +410,13 @@ sub chrPair_sEndU_assignHap{
             # update
             $LocRegInfoAf->[1] = $mark;
             $LocRegInfoAf->[3] = 1;
+        }
+        ## phased local-region stat
+        if($assignMethod eq 'ph'){
+            my ($FlankSize) = ($mark =~ /^RegionPhased;\(fSize:(\d+),/);
+            my $HapLinkCountSum = sum(values %$HapLinkC_Hf);
+            my $HapLinkDetails = join(';', map {"$_:$HapLinkC_Hf->{$_}"} sort keys %$HapLinkC_Hf);
+            $V_Href->{LocRegPhased}->{"$mSeg_a,$mSeg_b"}->{ ($FlankSize*2) }->{$HapLinkCountSum}->{$HapLinkDetails} ++;
         }
         ## select hapComb
         my $assHapComb;

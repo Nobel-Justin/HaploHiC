@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.17";
-$DATE = '2019-03-24';
+$VERSION = "0.18";
+$DATE = '2019-04-05';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -254,15 +254,8 @@ sub get_rOBpair_HapLinkCount{
     if(exists $HapLinkHf->{link}->{$winTag{a}}){
         if(exists $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}}){
             $HapLinkHf->{stat}->{QuickFind} ++;
-            my $LocRegInfoAf = $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}};
-            # phased local-region stat
-            if($LocRegInfoAf->[1] =~ /^RegionPhased;\(fSize:(\d+),/){
-                my $HapLinkCountSum = sum(values %{$LocRegInfoAf->[0]});
-                my $HapLinkDetails = join(';', map {"$_:$LocRegInfoAf->[0]->{$_}"} sort keys %{$LocRegInfoAf->[0]});
-                $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($1*2) }->{$HapLinkCountSum}->{$HapLinkDetails} ++;
-            }
-            # return quickFind
-            return $LocRegInfoAf;
+            # quickFind! return LocRegInfoAf
+            return $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}};
         }
     }
     else{ # not find, must be next a-side bin-Idx
@@ -363,17 +356,10 @@ sub get_rOBpair_HapLinkCount{
             my $LocRegInfoAf = [\%HapLinkCount, $mark, ($phased?'ph':'rd'), 0];
             $HapLinkHf->{stat}->{Calculate} ++;
             $HapLinkHf->{link}->{$winTag{a}}->{$winTag{b}} = $LocRegInfoAf;
-            # 1) phased local-region stat
-            # 2) update the UnitTimes for next operation
-            if($phased){
-                my $HapLinkCountSum = sum(values %HapLinkCount);
-                my $HapLinkDetails = join(';', map {"$_:$HapLinkCount{$_}"} sort keys %HapLinkCount);
-                $V_Href->{LocRegPhased}->{"$mSeg{a},$mSeg{b}"}->{ ($FlankSize*2) }->{$HapLinkCountSum}->{$HapLinkDetails} ++;
-                $V_Href->{UKreadsFlankRegUnitIniTimes} = max( min( $time*2, $V_Href->{UKreadsFlankRegUnitMidTimes} ), 1 );
-            }
-            else{
-                $V_Href->{UKreadsFlankRegUnitIniTimes} = $time;
-            }
+            # update the UnitTimes for next operation
+            $V_Href->{UKreadsFlankRegUnitIniTimes} =   $phased
+                                                     ? max( min( $time*2, $V_Href->{UKreadsFlankRegUnitMidTimes} ), 1 )
+                                                     : $time;
             # return
             return $LocRegInfoAf;
         }
