@@ -27,8 +27,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::mergeHaploReads';
 #----- version --------
-$VERSION = "0.05";
-$DATE = '2019-03-03';
+$VERSION = "0.06";
+$DATE = '2019-04-06';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -128,7 +128,7 @@ sub mergeStatOfPhasedLocalRegion{
     # merge
     my $mergeStatFile = catfile($V_Href->{outdir}, $pairBamHref->{prefix}.'.statOfPhasedLocReg.gz');
     ## header
-    `gzip -cd $statFiles[0] | grep '^#' | head -2 | gzip -c > $mergeStatFile`;
+    `gzip -cd $statFiles[0] | grep '^#' | gzip -c > $mergeStatFile`;
     ## content
     `zcat @statFiles | grep -v '^#' | sort -k 2,2 -k 3n,3 -k 4n,4 | gzip -c >> $mergeStatFile`;
 }

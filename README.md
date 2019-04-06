@@ -109,7 +109,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/mergeHaploReads.pm
 ### HaploHiC::PhasedHiC::mergeHaploReads
-### VERSION = "0.05"
+### VERSION = "0.06"
 - merge_haplo_reads
 - mergeReadsOfEachHapComb
 - mergeStatOfPhasedLocalRegion
