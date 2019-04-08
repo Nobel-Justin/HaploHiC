@@ -31,8 +31,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::plotPhasedLocReg';
 #----- version --------
-$VERSION = "0.04";
-$DATE = '2019-04-06';
+$VERSION = "0.05";
+$DATE = '2019-04-08';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -72,7 +72,6 @@ sub return_HELP_INFO{
         -tmr_pc  [f]  ratio for unilateral trimming from phased link counts. [0.01]
         -amt_fc  [s]  manually set the top of amount. [0]
         -rgb     [s]  rgb of heatmap color. ['255,0,0']
-        -add_r   [f]  uniform addition ratio in phased local region. [0]<=0.1
 
         -h|help       Display this help info.
 
