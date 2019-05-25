@@ -9,8 +9,6 @@ use BioFuse::Util::Sys qw/ file_exist /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::Index qw/ Pos2Idx /;
 use BioFuse::Util::Sort qw/ sortByStrAndSubNum /;
-use BioFuse::BioInfo::Objects::HicReads_OB;
-use BioFuse::BioInfo::Objects::HicPairEnd_OB;
 use HaploHiC::LoadOn;
 
 require Exporter;
@@ -61,7 +59,7 @@ sub phasePE_to_contactCount{
     # load reads from each bam
     for my $tag (sort keys %$tagToBamHref){
         for my $hapSplitBam (@{$tagToBamHref->{$tag}}){
-            my $mark = $hapSplitBam->get_tag;
+            my $mark = $hapSplitBam->tag;
             # read phased bam
             my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
             my @chrSelOpt = (chrPair => $chrPair, preChr => $preChr, chrRel => $chrRel);
@@ -91,7 +89,7 @@ sub load_phasedPE_contacts{
     my $lastChrPair = join(',', @$lastChrPairAf[0,1]);
     for my $pe_OB (@$pe_OB_poolAf){
         # get chr-pos ascending sorted all mapped reads_OB
-        my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+        my $rOB_sortAref = $pe_OB->sorted_rOB_Af(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
         # recover SuppHaplo attribute
         $_->recover_SuppHaploAttr for @$rOB_sortAref;
         # extract haplotype confirmed alignments
@@ -110,8 +108,8 @@ sub load_phasedPE_contacts{
         }
         # as sorted, so take first[0] and last[-1] one as index of contacted region
         my (%chr, %pIdx, %hapID);
-        $chr{a}   = $hasHaprOB[ 0]->get_mseg;
-        $chr{b}   = $hasHaprOB[-1]->get_mseg;
+        $chr{a}   = $hasHaprOB[ 0]->mseg;
+        $chr{b}   = $hasHaprOB[-1]->mseg;
         next if(!exists $V_Href->{ChrThings}->{$chr{a}} || !exists $V_Href->{ChrThings}->{$chr{b}});
         # chrPair selection
         if(    defined $chrPair
@@ -139,8 +137,8 @@ sub load_phasedPE_contacts{
             $lastChrPair = join(',', @$lastChrPairAf[0,1]);
         }
         # go on recording
-        $pIdx{a}  = &{$idxFunc}(chr => $chr{a}, pos => $hasHaprOB[ 0]->get_mpos);
-        $pIdx{b}  = &{$idxFunc}(chr => $chr{b}, pos => $hasHaprOB[-1]->get_mpos);
+        $pIdx{a}  = &{$idxFunc}(chr => $chr{a}, pos => $hasHaprOB[ 0]->mpos);
+        $pIdx{b}  = &{$idxFunc}(chr => $chr{b}, pos => $hasHaprOB[-1]->mpos);
         $hapID{a} = $hasHaprOB[ 0]->get_SuppHaploStr;
         $hapID{b} = $hasHaprOB[-1]->get_SuppHaploStr;
         # hapID might have multiple haplotype, then make them really inter-haplotype
@@ -151,7 +149,7 @@ sub load_phasedPE_contacts{
             $hapID{$p} =  first {$_ ne $hapID{$i}} split /,/, $hapID{$p};
         }
         # get PE-Info string
-        my $peInfoStr = join(';', map {( join(',', $_->get_mseg, $_->get_mpos) )} @$rOB_sortAref);
+        my $peInfoStr = join(';', map {( join(',', $_->mseg, $_->mpos) )} @$rOB_sortAref);
         # record, 'peInfoStr' as key, 'accumulated count' as value
         $V_Href->{phasePEdetails}->{$chr{a}}->{$chr{b}}->{$pIdx{a}}->{$pIdx{b}}->{"$hapID{a},$hapID{b}"}->{$peInfoStr} ++;
     }
@@ -229,15 +227,15 @@ sub get_rOBpair_HapLinkCount{
     else{
         ($rOB{a}, $rOB{b}) = sort {
                                 sortByStrAndSubNum(
-                                    Str_a => $a->get_mseg, Num_a => $a->get_mpos,
-                                    Str_b => $b->get_mseg, Num_b => $b->get_mpos,
+                                    Str_a => $a->mseg, Num_a => $a->mpos,
+                                    Str_b => $b->mseg, Num_b => $b->mpos,
                                     SortHref => $V_Href->{ChrThings},
                                     SortKey  => 'turn'
                                 )
                              } ($parm{rOB_a}, $parm{rOB_b});
     }
     # get region pair
-    my %mSeg = map { ($_, $rOB{$_}->get_mseg) } keys %rOB;
+    my %mSeg = map { ($_, $rOB{$_}->mseg) } keys %rOB;
     # first check chr-pair
     if(    ! exists $V_Href->{phasePEcontact}->{$mSeg{a}}
         || ! exists $V_Href->{phasePEcontact}->{$mSeg{a}}->{$mSeg{b}}
@@ -246,8 +244,8 @@ sub get_rOBpair_HapLinkCount{
         return [\%HapLinkCount, "LackChrLink($mSeg{a},$mSeg{b})", 'rd', 0];
     }
     # then, pos-pair
-    my %mPos = map { ($_, $rOB{$_}->get_mpos) } keys %rOB;
-    my %mExp = map { ($_, $mPos{$_}+$rOB{$_}->get_mRefLen-1) } keys %rOB;
+    my %mPos = map { ($_, $rOB{$_}->mpos) } keys %rOB;
+    my %mExp = map { ($_, $mPos{$_}+$rOB{$_}->mRefLen-1) } keys %rOB;
     # try quick find from HapLinkC_pool
     my %winIdx = map {($_, Pos2Idx(pos => $mPos{$_}, winSize => $V_Href->{UKreadsFlankRegUnit}))} qw/a b/;
     my %winTag = map {($_, "$mSeg{$_},w$winIdx{$_}")} qw/a b/;

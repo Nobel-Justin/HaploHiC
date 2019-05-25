@@ -46,7 +46,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/splitPairBam.pm
 ### HaploHiC::PhasedHiC::splitPairBam
-### VERSION = "0.30"
+### VERSION = "0.31"
 - divide_pairBam
 - prepareSplitBamObj
 - getTODOpairBamHrefArray
@@ -116,7 +116,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 
 ## PhasedHiC/plotPhasedLocReg.pm
 ### HaploHiC::PhasedHiC::plotPhasedLocReg
-### VERSION = "0.04"
+### VERSION = "0.05"
 - return_HELP_INFO
 - Load_moduleVar_to_pubVarPool
 - Get_Cmd_Options

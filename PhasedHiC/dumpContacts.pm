@@ -74,7 +74,7 @@ sub dump_contacts{
         for my $tag (@tag){
             $V_Href->{phasePEcontact} = {}; # reset contact container
             for my $mergeBam (@{$tagToMergeBam{$tag}}){
-                my $mark = $mergeBam->get_tag;
+                my $mark = $mergeBam->tag;
                 # read phased bam
                 my @lastChrPair = ('__NA__', '__NA__', $mark); # takes $mark by the way
                 my @subrtOpt = (subrtRef => \&load_phasedPE_contacts, subrtParmAref => [idxFunc => \&get_contacts_idx, lastChrPairAf => \@lastChrPair]);

@@ -10,7 +10,7 @@ use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::BioInfo::FASTA qw/ read_fasta_file /;
 use BioFuse::Util::String qw/ getStrRepUnit /;
 use BioFuse::Util::Index qw/ Pos2Idx FindOverlapIdxRegion /;
-use BioFuse::BioInfo::Objects::PhasedMut_OB;
+use BioFuse::BioInfo::Objects::Allele::PhasedMut_OB;
 use HaploHiC::LoadOn;
 
 require Exporter;
@@ -119,7 +119,7 @@ sub load_phased_VCF{
         $V_Href->{VCFmutStat}->{i05_hetPhaMut} ++ if( !$is_Hom );
         my $pMutNO = $V_Href->{VCFmutStat}->{i05_iniPhaMut};
         # create PhasedMut_OB
-        my $PhasedMut_OB = BioFuse::BioInfo::Objects::PhasedMut_OB->new( chr=>$chr, pos=>$pos, phMutNO=>$pMutNO );
+        my $PhasedMut_OB = BioFuse::BioInfo::Objects::Allele::PhasedMut_OB->new( chr=>$chr, pos=>$pos, phMutNO=>$pMutNO );
         # ref-info
         my $refBase = substr($refSeq,0,1);
         my $refTail = substr($refSeq,1); # might have

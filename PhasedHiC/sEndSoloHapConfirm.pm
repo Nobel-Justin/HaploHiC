@@ -94,8 +94,8 @@ sub prepareGetHapBamObj{
     my $pairBamHref = $parm{pairBamHref};
     my $tag = $parm{tag};
 
-    my $splitBamPath = $pairBamHref->{splitBam}->{$tag}->get_filepath;
-    my $splitBamTag = $pairBamHref->{splitBam}->{$tag}->get_tag;
+    my $splitBamPath = $pairBamHref->{splitBam}->{$tag}->filepath;
+    my $splitBamTag = $pairBamHref->{splitBam}->{$tag}->tag;
     # possible haplo combination
     my ($hapID) = ($tag =~ /sEnd-(h\d+)/);
     my @hapComb = $hapID ? ("${hapID}Intra") : (map {("h${_}Intra")} (1 .. $V_Href->{haploCount}));
@@ -105,7 +105,7 @@ sub prepareGetHapBamObj{
         my $getHapTag = "$tag.$hapComb";
         (my $getHapBamPath = $splitBamPath) =~ s/$tag/$getHapTag/;
         (my $getHapBamTag  = $splitBamTag)  =~ s/$tag/$getHapTag/;
-        $pairBamHref->{splitBam}->{$getHapTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $getHapBamPath, tag => $getHapBamTag);
+        $pairBamHref->{splitBam}->{$getHapTag} = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => $getHapBamPath, tag => $getHapBamTag);
         # prepare bam for final merge
         push @{$pairBamHref->{bamToMerge}->{"merge.$hapComb"}}, $pairBamHref->{splitBam}->{$getHapTag};
     }
@@ -154,12 +154,12 @@ sub getChrPairBam{
         $pairBamHref->{chrPairBam} = {}; # reset
         for my $tag (@tag){
             my $splitBam = $pairBamHref->{splitBam}->{$tag};
-            my $chrPairList = $splitBam->get_filepath . '.chrPairList';
+            my $chrPairList = $splitBam->filepath . '.chrPairList';
             open (CPL, Try_GZ_Read($chrPairList)) || die "fail read chrPairList: $!\n";
             while(<CPL>){
                 my ($chrPairTag, $chrPairBamPath) = (split);
                 my $chrPairBamTag = "$pairBamHref->{prefix} $tag $chrPairTag";
-                $pairBamHref->{chrPairBam}->{$tag}->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $chrPairBamPath, tag => $chrPairBamTag);
+                $pairBamHref->{chrPairBam}->{$tag}->{$chrPairTag} = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => $chrPairBamPath, tag => $chrPairBamTag);
                 my ($preChr) = (split /,/, $chrPairTag)[0];
                 my $chrRel = $chrPairTag =~ /^(.+),\1$/ ? 'intraChr' : 'interChr';
                 $preChrHf->{$preChr}->{$chrRel}->{$chrPairTag} = 1;
@@ -180,7 +180,7 @@ sub BamToChrPair{
     for my $tag (@$tagAf){
         my $splitBam = $pairBamHref->{splitBam}->{$tag};
         # temp workspace
-        my $chrPairDir = $splitBam->get_filepath . '-chrPairDir';
+        my $chrPairDir = $splitBam->filepath . '-chrPairDir';
         `rm -rf $chrPairDir` if -d $chrPairDir;
         `mkdir -p $chrPairDir`;
         # read $tag split bam, and write peOB to chr-pair bams
@@ -192,12 +192,12 @@ sub BamToChrPair{
         # close chr-pair bams
         $_->stop_write for values %chrPairBam;
         # write chrPair list
-        my $chrPairList = $splitBam->get_filepath . '.chrPairList';
+        my $chrPairList = $splitBam->filepath . '.chrPairList';
         open (CPL, Try_GZ_Write($chrPairList)) || die "fail write chrPairList: $!\n";
-        print CPL join("\t", $_, $chrPairBam{$_}->get_filepath)."\n" for sort keys %chrPairBam;
+        print CPL join("\t", $_, $chrPairBam{$_}->filepath)."\n" for sort keys %chrPairBam;
         close CPL;
         # inform
-        my $mark = $splitBam->get_tag;
+        my $mark = $splitBam->tag;
         stout_and_sterr "[INFO]\t".`date`
                              ."\tsplit $mark bam to chrPair bam OK.\n";
     }
@@ -325,7 +325,7 @@ sub chrPair_HapConfirmWork{
                 # write LocRegPhased of this chrPairBam
                 &chrPair_LocRegPhased(chrPairBam => $chrPairBam);
                 # inform
-                my $mark = $chrPairBam->get_tag;
+                my $mark = $chrPairBam->tag;
                 my $HapLinkStat = join('; ', map {("$_:$HapLinkHf->{stat}->{$_}")} sort keys %{$HapLinkHf->{stat}});
                 stout_and_sterr "[INFO]\t".`date`
                                      ."\tassign haplotype to UK-end of PE-reads from $mark bam OK.\n"
@@ -344,15 +344,15 @@ sub chrPair_prepareGetHapBam{
     my $chrPairBam = $parm{chrPairBam};
     my $getHapBamHf = $parm{getHapBamHf};
 
-    my $chrPairBamPath = $chrPairBam->get_filepath;
-    my $chrPairBamHead = join('', @{$chrPairBam->get_SAMheader(samtools => $V_Href->{samtools})}) . "\n";
+    my $chrPairBamPath = $chrPairBam->filepath;
+    my $chrPairBamHead = join('', @{$chrPairBam->header_Af(samtools => $V_Href->{samtools})}) . "\n";
     # possible haplo combination
     my ($hapID) = ($tag =~ /sEnd-(h\d+)/);
     my @hapComb = $hapID ? ("${hapID}Intra") : (map {("h${_}Intra")} (1 .. $V_Href->{haploCount}));
     push @hapComb, 'hInter';
     for my $hapComb (@hapComb){
         # getHapBam object with filepath and tag
-        $getHapBamHf->{$hapComb} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => "$chrPairBamPath.$hapComb.bam", tag => "$tag.$hapComb");
+        $getHapBamHf->{$hapComb} = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => "$chrPairBamPath.$hapComb.bam", tag => "$tag.$hapComb");
         $getHapBamHf->{$hapComb}->start_write(samtools => $V_Href->{samtools});
         $getHapBamHf->{$hapComb}->write(content => $chrPairBamHead);
     }
@@ -369,7 +369,7 @@ sub chrPair_sEndU_assignHap{
 
     for my $pe_OB (@$pe_OB_poolAf){
         # get chr-pos ascending sorted all mapped reads_OB
-        my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+        my $rOB_sortAref = $pe_OB->sorted_rOB_Af(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
         # recover SuppHaplo attribute
         $_->recover_SuppHaploAttr for @$rOB_sortAref;
         # get index of hasHap and nonHap reads_OB
@@ -386,8 +386,8 @@ sub chrPair_sEndU_assignHap{
         my ($HapLinkC_Hf, $mark, $assignMethod, $modBool) = @$LocRegInfoAf;
         # assign HapID to nonHap_rOB
         ## once local region is not phased, reset mark and loads pre-defined HapLink
-        my $mSeg_a = $rOB_a->get_mseg;
-        my $mSeg_b = $rOB_b->get_mseg;
+        my $mSeg_a = $rOB_a->mseg;
+        my $mSeg_b = $rOB_b->mseg;
         my $isIntraChr = $mSeg_a eq $mSeg_b;
         unless($modBool){
             if($assignMethod eq 'rd'){
@@ -465,7 +465,7 @@ sub chrPair_PEsplitStat{
     my $tag = $parm{tag};
     my $chrPairBam = $parm{chrPairBam};
 
-    my $PEsplitStat = $chrPairBam->get_filepath . '.PEsplitStat';
+    my $PEsplitStat = $chrPairBam->filepath . '.PEsplitStat';
     open (PES, Try_GZ_Write($PEsplitStat)) || die "fail write PEsplitStat: $!\n";
     print PES "$tag.$_\t$V_Href->{PEsplitStat}->{$_}\n" for sort keys %{$V_Href->{PEsplitStat}};
     close PES;
@@ -478,7 +478,7 @@ sub chrPair_LocRegPhased{
     my %parm = @_;
     my $chrPairBam = $parm{chrPairBam};
 
-    my $LocRegPhased = $chrPairBam->get_filepath . '.statOfPhasedLocReg.gz';
+    my $LocRegPhased = $chrPairBam->filepath . '.statOfPhasedLocReg.gz';
     open (LRP, Try_GZ_Write($LocRegPhased)) || die "fail write LocRegPhased: $!\n";
     for my $ChrPair (sort keys %{$V_Href->{LocRegPhased}}){
         for my $LocRegSize (sort {$a<=>$b} keys %{$V_Href->{LocRegPhased}->{$ChrPair}}){
@@ -551,7 +551,7 @@ sub mergeChrPairResult{
             # getHapBam
             my $getHapTag = "$tag.$hapComb";
             my $getHapBam = $pairBamHref->{splitBam}->{$getHapTag};
-            push @ToInform, $getHapBam->get_filepath;
+            push @ToInform, $getHapBam->filepath;
             # prepare PEsplitStat
             for my $chrTag (qw/ IntraChr InterChr /){
                 for my $assignMethod (qw/ ph rd /){
@@ -563,7 +563,7 @@ sub mergeChrPairResult{
                 next unless exists $pairBamHref->{chrPairBam}->{$tag}->{$chrPairTag};
                 my $chrPairBam = $pairBamHref->{chrPairBam}->{$tag}->{$chrPairTag};
                 # load chrPair hapComb bam and merge to getHapBam
-                my $chrPairGetHapBam = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $chrPairBam->get_filepath . ".$hapComb.bam", tag => "$tag.$hapComb");
+                my $chrPairGetHapBam = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => $chrPairBam->filepath . ".$hapComb.bam", tag => "$tag.$hapComb");
                 my @subrtOpt = (subrtRef => \&writeChrPairReadsToGetHapBam, subrtParmAref => [getHapBam => $getHapBam]);
                 $chrPairGetHapBam->smartBam_PEread(samtools => $V_Href->{samtools}, readsType => 'HiC', quiet => 1, simpleLoad => 1, deal_peOB_pool => 1, @subrtOpt);
                 # load chrPair PEsplitStat, only once, so let's choose 'hInter'
@@ -577,8 +577,8 @@ sub mergeChrPairResult{
         # write merge stat data of phased local region
         &writeMergeLocRegPhased(pairBamHref => $pairBamHref, tag => $tag);
         # sweep chrPair folder and list
-        my $chrPairList = $pairBamHref->{splitBam}->{$tag}->get_filepath . '.chrPairList';
-        my $chrPairDir  = $pairBamHref->{splitBam}->{$tag}->get_filepath . '-chrPairDir';
+        my $chrPairList = $pairBamHref->{splitBam}->{$tag}->filepath . '.chrPairList';
+        my $chrPairDir  = $pairBamHref->{splitBam}->{$tag}->filepath . '-chrPairDir';
         `rm -rf $chrPairDir $chrPairList`;
         # inform
         stout_and_sterr "[INFO]\t".`date`
@@ -608,7 +608,7 @@ sub startWriteGetHapBam{
 
     # prepare SAM-header
     my $splitBam = $pairBamHref->{splitBam}->{$tag};
-    my $HeadAf = $splitBam->get_SAMheader(samtools => $V_Href->{samtools});
+    my $HeadAf = $splitBam->header_Af(samtools => $V_Href->{samtools});
     ## add options of second part in @PG line
     my $PGi = first {$HeadAf->[$_] =~ /\@PG/} (0 .. scalar(@$HeadAf)-1);
     chomp($HeadAf->[$PGi]);
@@ -643,7 +643,7 @@ sub loadChrPairPEsplitStat{
     my %parm = @_;
     my $chrPairBam = $parm{chrPairBam};
 
-    my $chrPairPEsplitStat = $chrPairBam->get_filepath . '.PEsplitStat';
+    my $chrPairPEsplitStat = $chrPairBam->filepath . '.PEsplitStat';
     open (PES, Try_GZ_Read($chrPairPEsplitStat)) || die "fail read PEsplitStat: $!\n";
     while(<PES>){
         my ($key, $count) = (split)[0,1];
@@ -659,7 +659,7 @@ sub loadChrPairLocRegPhased{
     my %parm = @_;
     my $chrPairBam = $parm{chrPairBam};
 
-    my $chrPairLocRegPhased = $chrPairBam->get_filepath . '.statOfPhasedLocReg.gz';
+    my $chrPairLocRegPhased = $chrPairBam->filepath . '.statOfPhasedLocReg.gz';
     open (LRP, Try_GZ_Read($chrPairLocRegPhased)) || die "fail read chrPairLocRegPhased: $!\n";
     while(<LRP>){
         my ($ChrPair, $LocRegSize, $LinkCount, $LinkDetails, $Count) = (split)[0..4];
@@ -677,7 +677,7 @@ sub writeMergeLocRegPhased{
     my $pairBamHref = $parm{pairBamHref};
 
     my $splitBam = $pairBamHref->{splitBam}->{$tag};
-    (my $LocRegPhased = $splitBam->get_filepath) =~ s/bam$/statOfPhasedLocReg.gz/;
+    (my $LocRegPhased = $splitBam->filepath) =~ s/bam$/statOfPhasedLocReg.gz/;
     (my $localRegionUnit = sprintf "%e", $V_Href->{UKreadsFlankRegUnit} * 2) =~ s/\.?0*e\+0?/E/;
     (my $shortTag = $tag) =~ s/^phMut-//;
 

@@ -8,7 +8,7 @@ use File::Spec::Functions qw/ catfile /;
 use List::Util qw/ min /;
 use BioFuse::Util::Sys qw/ file_exist /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
-use BioFuse::BioInfo::Objects::Bam_OB;
+use BioFuse::BioInfo::Objects::SeqData::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::PhasedHiC::splitPairBam qw/ forkSetting /;
 
@@ -49,7 +49,7 @@ sub merge_haplo_reads{
         my $pairBamPrefix = $pairBamHref->{prefix};
         for my $tag (sort keys %{$pairBamHref->{bamToMerge}}){
             my $mergeBamPath = catfile($V_Href->{outdir}, $pairBamPrefix.".$tag.bam");
-            $pairBamHref->{mergeBam}->{$tag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $mergeBamPath, tag => "$pairBamPrefix $tag");
+            $pairBamHref->{mergeBam}->{$tag} = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => $mergeBamPath, tag => "$pairBamPrefix $tag");
         }
     }
 
@@ -99,7 +99,7 @@ sub mergeReadsOfEachHapComb{
         my $bamToMergeAf = $pairBamHref->{bamToMerge}->{$tag};
         ## write SAM-header
         ## copy original SAM-header from last bam
-        $mergeBam->write(content => $_) for @{ $bamToMergeAf->[-1]->get_SAMheader(samtools => $V_Href->{samtools}) };
+        $mergeBam->write(content => $_) for @{ $bamToMergeAf->[-1]->header_Af(samtools => $V_Href->{samtools}) };
         ## copy reads
         for my $bamToMerge (@$bamToMergeAf){
             ## official process!!!
@@ -110,7 +110,7 @@ sub mergeReadsOfEachHapComb{
         # stop writing mergedBam
         $mergeBam->stop_write;
         # inform
-        my $mark = $mergeBam->get_tag;
+        my $mark = $mergeBam->tag;
         stout_and_sterr "[INFO]\t".`date`
                              ."\tmerge $mark bam OK.\n";
     }

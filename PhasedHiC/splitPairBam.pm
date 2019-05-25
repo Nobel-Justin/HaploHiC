@@ -10,9 +10,9 @@ use BioFuse::Util::Sys qw/ file_exist /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
 use BioFuse::BioInfo::Quality qw/ baseQ_char2score /;
-use BioFuse::BioInfo::Objects::HicReads_OB;
-use BioFuse::BioInfo::Objects::HicPairEnd_OB;
-use BioFuse::BioInfo::Objects::Bam_OB;
+use BioFuse::BioInfo::Objects::SeqData::HicReads_OB;
+use BioFuse::BioInfo::Objects::SeqData::HicPairEnd_OB;
+use BioFuse::BioInfo::Objects::SeqData::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::PhasedHiC::dumpContacts qw/ load_enzyme_site_list /;
 use HaploHiC::PhasedHiC::phasedMutWork qw/ load_phased_VCF PosToPhasedMut /; # release_phaseMut_OB
@@ -37,8 +37,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::splitPairBam';
 #----- version --------
-$VERSION = "0.30";
-$DATE = '2019-03-27';
+$VERSION = "0.31";
+$DATE = '2019-05-25';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -148,7 +148,7 @@ sub prepareSplitBamObj{
     # record split-bam objects
     for my $tag (@tags){
         my $splitBamPath = catfile($pairBamHref->{workSpace}, $pairBamPrefix.".$tag.bam");
-        $pairBamHref->{splitBam}->{$tag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $splitBamPath, tag => "$pairBamPrefix $tag");
+        $pairBamHref->{splitBam}->{$tag} = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => $splitBamPath, tag => "$pairBamPrefix $tag");
     }
 
     # prepare bam for final merge
@@ -243,7 +243,7 @@ sub startWriteSplitBam{
 
     # prepare SAM-header
     my $bam = $pairBamHref->{R1_bam} || $pairBamHref->{PE_bam};
-    my $HeadStr = join('', grep {/^\@SQ/ || /^\@RG/} @{ $bam->get_SAMheader(samtools => $V_Href->{samtools}) });
+    my $HeadStr = join('', grep {/^\@SQ/ || /^\@RG/} @{ $bam->header_Af(samtools => $V_Href->{samtools}) });
     ## more in PG info
     my $PG_info  = "\@PG\tID:$MODULE_NAME\tPN:haplo_div\tVN:$VERSION\tCL:$V_Href->{MainName} haplo_div";
        # $PG_info .= " -sampid $V_Href->{sampleID}";
@@ -290,7 +290,7 @@ sub loadrOBfromSourceBam{
         while(    $bufAvailSize{$rEnd}--
                && ( my $bamLine = <$fh> )
         ){
-            push @{$rBuff_Hf->{$rEnd}}, BioFuse::BioInfo::Objects::HicReads_OB->new(ReadsLineText => $bamLine, reads_end => $rEnd, _rc_optfd => 1, _rc_rdstr => 1);
+            push @{$rBuff_Hf->{$rEnd}}, BioFuse::BioInfo::Objects::SeqData::HicReads_OB->new(ReadsLineText => $bamLine, reads_end => $rEnd, _rc_optfd => 1, _rc_rdstr => 1);
         }
     }
     # both bams finish reading?
@@ -311,17 +311,17 @@ sub rOB_to_peOB{
 
     my $bam_no = $pairBamHref->{no};
     # get last PE-id
-    my %LastPid = map { ( ($fileEnd ? '__NA__' : $rBuff_Hf->{$_}->[-1]->get_pid), 1 ) } (1,2);
+    my %LastPid = map { ( ($fileEnd ? '__NA__' : $rBuff_Hf->{$_}->[-1]->pid), 1 ) } (1,2);
     # get shared PE-id
-    my %R1_Pid  = map { ($_,1) } grep { !exists $LastPid{$_}                       } map { $_->get_pid } @{$rBuff_Hf->{1}};
-    my %Sha_Pid = map { ($_,1) } grep { !exists $LastPid{$_} && exists $R1_Pid{$_} } map { $_->get_pid } @{$rBuff_Hf->{2}};
+    my %R1_Pid  = map { ($_,1) } grep { !exists $LastPid{$_}                       } map { $_->pid } @{$rBuff_Hf->{1}};
+    my %Sha_Pid = map { ($_,1) } grep { !exists $LastPid{$_} && exists $R1_Pid{$_} } map { $_->pid } @{$rBuff_Hf->{2}};
     undef %R1_Pid; # sweep
     # load PE-object
     my %pid2idx;
     for my $rEnd (1,2){
         my $shift_time = 0;
         for my $rOB ( @{$rBuff_Hf->{$rEnd}} ){
-            my $pid = $rOB->get_pid;
+            my $pid = $rOB->pid;
             if(    !exists $Sha_Pid{$pid}
                 ||  exists $LastPid{$pid}
             ){
@@ -332,7 +332,7 @@ sub rOB_to_peOB{
             if( !exists $pid2idx{$pid} ){
                 $$peIdx_Sf++;
                 $pid2idx{$pid} = $$peIdx_Sf;
-                $peOB_Hf->{$$peIdx_Sf} = BioFuse::BioInfo::Objects::HicPairEnd_OB->new( pe_Idx => "$bam_no-$$peIdx_Sf" );
+                $peOB_Hf->{$$peIdx_Sf} = BioFuse::BioInfo::Objects::SeqData::HicPairEnd_OB->new( peIdx => "$bam_no-$$peIdx_Sf" );
             }
             # load rOB to pe_OB
             $peOB_Hf->{$pid2idx{$pid}}->load_reads_OB( reads_OB => $rOB );
@@ -440,7 +440,7 @@ sub judge_on_rEnd{
 
     # judgement on each end's each alignment
     for my $rEnd (1,2){
-        my $reads_OB_Aref = $pe_OB->get_reads_OB(reads_end => $rEnd);
+        my $reads_OB_Aref = $pe_OB->rOB_Af(reads_end => $rEnd);
         for my $reads_OB ( @$reads_OB_Aref ){
             # qulifying on alignment
             my $alignJudge = &judge_reads_alignment(reads_OB => $reads_OB);
@@ -458,7 +458,7 @@ sub judge_on_rEnd{
             }
             # if good, check haplotype covered of this alignment
             ## get phased Mut(s) this reads covers
-            my $phMut_OB_Aref = PosToPhasedMut(chr => $reads_OB->get_mseg, pos => $reads_OB->get_mpos, ext => $reads_OB->get_mRefLen - 1);
+            my $phMut_OB_Aref = PosToPhasedMut(chr => $reads_OB->mseg, pos => $reads_OB->mpos, ext => $reads_OB->mRefLen - 1);
             # no phased-mut covered #
             if( scalar(@$phMut_OB_Aref) == 0 ){
                 $reads_OB->load_AlignJudge( alignJudge => 'UK,' ); # haplotype Un-Known
@@ -514,7 +514,7 @@ sub judge_reads_alignment{
             $alignJudge .= 'MM,';
         }
         # Low Mapping quality
-        if( $reads_OB->get_mapQ < $V_Href->{min_mapQ} ){
+        if( $reads_OB->mapQ < $V_Href->{min_mapQ} ){
             $alignJudge .= 'LM,';
         }
     }
@@ -773,7 +773,7 @@ sub judge_on_PE{
                 $Split_marker = "sEndSoloHapFarSame;R1:$rEndJdgHref->{1}->{J};R2:$rEndJdgHref->{2}->{J}";
                 # make ukEnd loads this hapID
                 my $rEndNonHap = $readsHapAmt{1} ? 2 : 1;
-                $_->load_SuppHaplo(hapID => $hapID, allele_OB => 'NULL') for @{$pe_OB->get_reads_OB(reads_end => $rEndNonHap)};
+                $_->load_SuppHaplo(hapID => $hapID, allele_OB => 'NULL') for @{$pe_OB->rOB_Af(reads_end => $rEndNonHap)};
             }
         }
         ## t4, phMut-sEnd-hInter, 2 cases
@@ -800,7 +800,7 @@ sub judge_on_PE{
                 $Split_marker = "sEndSoloHapSelect;R1:$rEndJdgHref->{1}->{J};R2:$rEndJdgHref->{2}->{J}";
                 $MatchHap_Href->{$selectHapID} = 1;
                 # dislink other haplo(s) with all reads_OBs of this pe_OB
-                $_->onlyKeep_SuppHaplo( hapID => $selectHapID ) for @{ $pe_OB->get_reads_OB( reads_end => $mhEnd ) };
+                $_->onlyKeep_SuppHaplo( hapID => $selectHapID ) for @{ $pe_OB->rOB_Af( reads_end => $mhEnd ) };
             }
         }
         ## t2, phMut-dEnd-hInter, 7 cases remaining
@@ -826,8 +826,8 @@ sub judge_on_PE{
                 $Split_marker = "${newEndType}SoloHapSelect;R1:$rEndJdgHref->{1}->{J};R2:$rEndJdgHref->{2}->{J}";
                 $MatchHap_Href->{$selectHapID} = 1;
                 # dislink other haplo(s) with all reads_OBs of this pe_OB
-                $_->onlyKeep_SuppHaplo( hapID => $selectHapID ) for @{ $pe_OB->get_reads_OB( reads_end => 1 ) };
-                $_->onlyKeep_SuppHaplo( hapID => $selectHapID ) for @{ $pe_OB->get_reads_OB( reads_end => 2 ) };
+                $_->onlyKeep_SuppHaplo( hapID => $selectHapID ) for @{ $pe_OB->rOB_Af( reads_end => 1 ) };
+                $_->onlyKeep_SuppHaplo( hapID => $selectHapID ) for @{ $pe_OB->rOB_Af( reads_end => 2 ) };
             }
         }
     }
@@ -903,7 +903,7 @@ sub sortSplitBamByPEcontact{
     for my $tag (@tags){
         my $splitBam = $pairBamHref->{splitBam}->{$tag};
         # temp workspace
-        my $chrPairDir = $splitBam->get_filepath . '-chrPairDir';
+        my $chrPairDir = $splitBam->filepath . '-chrPairDir';
         `rm -rf $chrPairDir` if -d $chrPairDir;
         `mkdir -p $chrPairDir`;
         # read $tag split bam, and write peOB to chr-pair bams
@@ -919,7 +919,7 @@ sub sortSplitBamByPEcontact{
         # sweep
         `rm -rf $chrPairDir`;
         # inform
-        my $mark = $splitBam->get_tag;
+        my $mark = $splitBam->tag;
         stout_and_sterr "[INFO]\t".`date`
                              ."\tsort $mark bam OK.\n";
     }
@@ -936,22 +936,22 @@ sub write_peOB_to_chrPairBam{
     my $chrPairDir = $parm{chrPairDir};
     my $sorted = $parm{sorted} || 0;
 
-    my $tag = $splitBam->get_tag;
+    my $tag = $splitBam->tag;
     my $useUKbool = ($tag !~ /-dEnd-h/ && $tag !~ /-hInter/); # sEnd-hx, unknown
     my $last_chrPairTag = undef;
     for my $pe_OB (@$pe_OB_poolAf){
         # sorted chr-pair
         my @rOB = grep $useUKbool || $_->printSAM !~ /\sXH:Z:UK\s/,
-                  @{ $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') };
+                  @{ $pe_OB->sorted_rOB_Af(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') };
         # idx for chrPairTag
         my @idx = &getIdxOfrOBforChrPair(tag => $tag, rOB_sortAref => \@rOB);
-        my $chrPairTag = join(',', $rOB[$idx[0]]->get_mseg, $rOB[$idx[1]]->get_mseg); # chromosome name barely matches ','
+        my $chrPairTag = join(',', $rOB[$idx[0]]->mseg, $rOB[$idx[1]]->mseg); # chromosome name barely matches ','
         # check chr-pair bam
         unless(exists $chrPairBamHf->{$chrPairTag}){
-            my $chrPairFileTag = join('-', $rOB[$idx[0]]->get_mseg, $rOB[$idx[1]]->get_mseg);
-            $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => catfile($chrPairDir, "$chrPairFileTag.bam"));
+            my $chrPairFileTag = join('-', $rOB[$idx[0]]->mseg, $rOB[$idx[1]]->mseg);
+            $chrPairBamHf->{$chrPairTag} = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => catfile($chrPairDir, "$chrPairFileTag.bam"));
             $chrPairBamHf->{$chrPairTag}->start_write(samtools => $V_Href->{samtools});
-            $chrPairBamHf->{$chrPairTag}->write(content => $_) for @{ $splitBam->get_SAMheader(samtools => $V_Href->{samtools}) };
+            $chrPairBamHf->{$chrPairTag}->write(content => $_) for @{ $splitBam->header_Af(samtools => $V_Href->{samtools}) };
             # deal with last chr-pair if sorted
             $chrPairBamHf->{$last_chrPairTag}->stop_write if $sorted && defined $last_chrPairTag;
         }
@@ -1008,13 +1008,13 @@ sub findContactAnchor{
         my $hasHaprOB_L = $rOB_sortAref->[$hasHapIdx[-1]];
         my $nonHaprOB_F = $rOB_sortAref->[$nonHapIdx[0]];
         my $nonHaprOB_L = $rOB_sortAref->[$nonHapIdx[-1]];
-        my $hFnLsameChr = ($hasHaprOB_F->get_mseg eq $nonHaprOB_L->get_mseg);
-        my $hLnFsameChr = ($hasHaprOB_L->get_mseg eq $nonHaprOB_F->get_mseg);
+        my $hFnLsameChr = ($hasHaprOB_F->mseg eq $nonHaprOB_L->mseg);
+        my $hLnFsameChr = ($hasHaprOB_L->mseg eq $nonHaprOB_F->mseg);
         # same chr
         if( $hFnLsameChr && $hLnFsameChr ){
             # larger pos gap
-            if(   abs($hasHaprOB_F->get_mpos - $nonHaprOB_L->get_mpos)
-                > abs($hasHaprOB_L->get_mpos - $nonHaprOB_F->get_mpos)
+            if(   abs($hasHaprOB_F->mpos - $nonHaprOB_L->mpos)
+                > abs($hasHaprOB_L->mpos - $nonHaprOB_F->mpos)
             ){
                 return ($hasHapIdx[0], $nonHapIdx[-1]);
             }
@@ -1032,8 +1032,8 @@ sub findContactAnchor{
         # diff chr (both)
         else{
             # longer mapped length
-            if(   $hasHaprOB_F->get_mReadLen + $nonHaprOB_L->get_mReadLen
-                > $hasHaprOB_L->get_mReadLen + $nonHaprOB_F->get_mReadLen
+            if(   $hasHaprOB_F->mReadLen + $nonHaprOB_L->mReadLen
+                > $hasHaprOB_L->mReadLen + $nonHaprOB_F->mReadLen
             ){
                 return ($hasHapIdx[0], $nonHapIdx[-1]);
             }
@@ -1059,7 +1059,7 @@ sub chrPairBamToSortSplitBam{
     my $chrPairBamHf = $parm{chrPairBamHf};
 
     # start to write new split bam
-    my $SAMheadAf = $splitBam->get_SAMheader(samtools => $V_Href->{samtools});
+    my $SAMheadAf = $splitBam->header_Af(samtools => $V_Href->{samtools});
     $splitBam->start_write(samtools => $V_Href->{samtools});
     $splitBam->write(content => $_) for @$SAMheadAf;
     # sort each chrPair bam and write to new split bam
@@ -1067,7 +1067,7 @@ sub chrPairBamToSortSplitBam{
     my @subrtOpt = (subrtRef => \&write_sort_peOB_to_newSplitBam, subrtParmAref => [splitBam => $splitBam]);
     my $chrPairTagAf = &getChrPairTagAf;
     ## each chrPair
-    my $tag = $splitBam->get_tag;
+    my $tag = $splitBam->tag;
     my $simpleLoad = ($tag =~ /sEnd-h\d/ ? 0 : 1); # sEnd-hx might need to select end-anchor
     for my $chrPairTag (@$chrPairTagAf){
         next unless exists $chrPairBamHf->{$chrPairTag};
@@ -1105,17 +1105,17 @@ sub write_sort_peOB_to_newSplitBam{
     my $pe_OB_poolAf = $parm{pe_OB_poolAf};
     my $splitBam = $parm{splitBam};
 
-    my $tag = $splitBam->get_tag;
+    my $tag = $splitBam->tag;
     my $useUKbool = ($tag !~ /-dEnd-h/ && $tag !~ /-hInter/); # sEnd-hx, unknown
     # map idx to sort_rOB
     my @peCoord;
     for my $i (0 .. scalar(@$pe_OB_poolAf)-1){
         # get chr-pos ascending sorted all mapped reads_OB
         my @rOB = grep $useUKbool || $_->printSAM !~ /\sXH:Z:UK\s/,
-                  @{ $pe_OB_poolAf->[$i]->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') };
+                  @{ $pe_OB_poolAf->[$i]->sorted_rOB_Af(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') };
         # idx for chrPairTag
         my @idx = &getIdxOfrOBforChrPair(tag => $tag, rOB_sortAref => \@rOB);
-        push @peCoord, [$i, $rOB[$idx[0]]->get_mpos, $rOB[$idx[1]]->get_mpos];
+        push @peCoord, [$i, $rOB[$idx[0]]->mpos, $rOB[$idx[1]]->mpos];
     }
     # sort by pos and write to new split bam
     $splitBam->write(content => join("\n",@{$pe_OB_poolAf->[$_->[0]]->printSAM(keep_all=>1)})."\n") for sort {$a->[1] <=> $b->[1] || $a->[2] <=> $b->[2]} @peCoord;

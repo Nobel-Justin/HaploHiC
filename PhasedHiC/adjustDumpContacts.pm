@@ -7,7 +7,7 @@ use List::Util qw/ max sum /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::Sys qw/ file_exist /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
-use BioFuse::BioInfo::Objects::Bam_OB;
+use BioFuse::BioInfo::Objects::SeqData::Bam_OB;
 use HaploHiC::LoadOn;
 
 require Exporter;

@@ -111,7 +111,7 @@ sub chrPair_dEndU_assignHap{
 
     for my $pe_OB (@$pe_OB_poolAf){
         # get chr-pos ascending sorted all mapped reads_OB
-        my $rOB_sortAref = $pe_OB->get_sorted_reads_OB(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+        my $rOB_sortAref = $pe_OB->sorted_rOB_Af(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
         # recover SuppHaplo attribute
         $_->recover_SuppHaploAttr for @$rOB_sortAref;
         # get haplo link count of paired rOB, <do not need sort again>
@@ -121,8 +121,8 @@ sub chrPair_dEndU_assignHap{
         my ($HapLinkC_Hf, $mark, $assignMethod, $modBool) = @$LocRegInfoAf;
         # assign HapID to both nonHap_rOB
         ## once local region is not phased, reset mark and loads pre-defined HapLink
-        my $mSeg_a = $rOB_a->get_mseg;
-        my $mSeg_b = $rOB_b->get_mseg;
+        my $mSeg_a = $rOB_a->mseg;
+        my $mSeg_b = $rOB_b->mseg;
         my $isIntraChr = $mSeg_a eq $mSeg_b;
         unless($modBool){
             if($assignMethod eq 'rd'){

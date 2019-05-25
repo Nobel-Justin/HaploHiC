@@ -8,7 +8,7 @@ use List::Util qw/ max /;
 use BioFuse::Util::Log qw/ warn_and_exit stout_and_sterr /;
 use BioFuse::Util::Sys qw/ file_exist trible_run_for_success /;
 use BioFuse::Util::GZfile qw/ Try_GZ_Read Try_GZ_Write /;
-use BioFuse::BioInfo::Objects::Bam_OB;
+use BioFuse::BioInfo::Objects::SeqData::Bam_OB;
 use HaploHiC::LoadOn;
 use HaploHiC::GetPath qw/ GetPath /;
 use HaploHiC::Extensions::JuicerDump qw/ load_chr_Things /;
@@ -288,7 +288,7 @@ sub Load_moduleVar_to_pubVarPool{
                                 'invalid-DumpedPairRv' => 0
                             } ],
             # {$chr}->{$PosIdx} = [ $PhasedMut_OB_1, $PhasedMut_OB_1, .. ]
-            # check BioFuse::BioInfo::Objects::PhasedMut_OB
+            # check BioFuse::BioInfo::Objects::Allele::PhasedMut_OB
             [ PhasedMut => {} ],
             # {flankSize}->{PhasedLinkCount} = $number
             [ LocRegPhased => {} ],
@@ -477,8 +477,8 @@ sub check_files{
                                     ."\t$SourceBam\n";
             }
             # bam object
-            my $R1_bam = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $R1_bam_path, tag => $R1_bam_prefix);
-            my $R2_bam = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $R2_bam_path, tag => $R2_bam_prefix);
+            my $R1_bam = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => $R1_bam_path, tag => $R1_bam_prefix);
+            my $R2_bam = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => $R2_bam_path, tag => $R2_bam_prefix);
             # records
             my $i = scalar @{$V_Href->{PairBamFiles}};
             push @{$V_Href->{PairBamFiles}}, {R1_bam => $R1_bam, R2_bam => $R2_bam, prefix => $R1_bam_prefix, no => $i};
@@ -510,7 +510,7 @@ sub check_files{
                                     ."\t$SourceBam\n";
             }
             # bam object
-            my $PE_bam = BioFuse::BioInfo::Objects::Bam_OB->new(filepath => $SourceBam, tag => $bam_prefix);
+            my $PE_bam = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => $SourceBam, tag => $bam_prefix);
             # records
             my $i = scalar @{$V_Href->{PairBamFiles}};
             push @{$V_Href->{PairBamFiles}}, {PE_bam => $PE_bam, prefix => $bam_prefix, no => $i};
