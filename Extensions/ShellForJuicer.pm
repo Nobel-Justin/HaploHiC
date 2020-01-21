@@ -92,7 +92,7 @@ sub return_HELP_INFO{
         -h|help      Display this help info.
 
      Version:
-        $VERSION at $DATE
+        $VERSION on $DATE
 
      Author:
         $AUTHOR ($EMAIL)

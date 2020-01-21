@@ -72,7 +72,7 @@ Options:
    -h|help       Display this help info.
 
 Version:
-   0.32 at 2019-04-05
+   0.32 on 2019-04-05
 
 Author:
    Wenlong Jia (wenlongkxm@gmail.com)
