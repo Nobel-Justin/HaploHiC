@@ -1,4 +1,4 @@
-# [haplo_div]() (Haplotype work)
+# haplo_div
 `haplo_div` loads alignment file(s) of Hi-C data and haplotype information, and assigns haplotypes to Hi-C PE-reads of unknown parental origin according to contacts information (**local contacts ratio**) in local genomic regions with dynamic size.
 
 ```bash
