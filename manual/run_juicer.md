@@ -3,7 +3,7 @@
 
 ## Usage
 
-```bash
+```
 Usage:   perl HaploHiC.pl run_juicer <[Options]>
 
 Options:
