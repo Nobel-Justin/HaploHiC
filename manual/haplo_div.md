@@ -3,7 +3,7 @@
 
 ## Usage
 
-```bash
+```
 Usage:   perl HaploHiC.pl haplo_div <[Options]>
 
 Options:

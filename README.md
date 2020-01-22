@@ -28,7 +28,7 @@ If you encounter problems, please open an issue at the [project on Github](https
 
 ## Usage
 HaploHiC provides series of commands for Hi-C data analysis.
-```bash
+```
 Usage:   perl HaploHiC.pl <command>
 
 Commands:
