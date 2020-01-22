@@ -1,6 +1,8 @@
 # haplo_div
 `haplo_div` loads alignment file(s) of Hi-C data and haplotype information, and assigns haplotypes to Hi-C PE-reads of unknown parental origin according to contacts information (**local contacts ratio**) in local genomic regions with dynamic size.
 
+## Usage
+
 ```bash
 Usage:   perl HaploHiC.pl haplo_div <[Options]>
 
@@ -77,3 +79,16 @@ Version:
 Author:
    Wenlong Jia (wenlongkxm@gmail.com)
 ```
+
+### Inputs
+
+### Steps
+
+
+
+
+
+
+
+
+
