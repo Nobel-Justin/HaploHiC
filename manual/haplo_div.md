@@ -106,7 +106,7 @@ run_k.sortN.bam
 We suggest to use GATK to [realign](https://github.com/broadinstitute/gatk-docs/blob/master/gatk3-tutorials/(howto)_Perform_local_realignment_around_indels.md) the bam files with the phased VCF (`-phsvcf`). In the realignment process, user needs to firstly sort the bam file by coordinates (`samtools sort`), then do GATK realign, and finally sort the realigned bam file by read-name (`samtools sort -n`).
 
 #### output folder. (`-outdir` option, **required**)
-All results will be stored under this folder (see [instance](#Outputs)). For each sequencing run, related summary files and subfolder will be created with specific prefix. The prefix is the bam file basename after removing the '.bam' postfix. The subfolders will store intermediate files for each sequencing run.
+All results will be stored under this folder (see [instance](#outputs)). For each sequencing run, related summary files and subfolder will be created with specific prefix. The prefix is the bam file basename after removing the '.bam' postfix. The subfolders will store intermediate files for each sequencing run.
 
 ### Tools and Database
 
@@ -225,5 +225,5 @@ Here is an instance, files under the output folder after all five steps (see [ne
 
 - dumpContacts
 
-  In this step, HaploHiC provides BP and FRAG mode dump from merged results to summarize raw contacts of pairwise windows.
+  In this step, HaploHiC provides **BP** and **FRAG** mode dump from merged results to summarize raw contacts of pairwise windows.
 
