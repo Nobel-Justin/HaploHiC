@@ -162,47 +162,68 @@ Here is an instance, files under the output folder after all five steps (see [ne
 ### Steps
 `haplo_div` has five steps: `splitBam`, `sEndUKtoHap`, `dEndUKtoHap`, `readsMerge`, and `dumpContacts`. User could set step interval to proceed via `-st_step` and `-ed_step` options.
 
-- splitBam\\
+- splitBam
+
   Firstly, HaploHiC loads phased mutations from the VCF input, and generates two files.
     - **VCF_load.phased_mut.report**
+
       basic statistics of phased mutations, including hom/het status, skipped mutations, allelic type of heterozygous mutation, close adjacent InDels, and tandem InDels.
+
     - **VCF_load.phased_mut.closeInDel.list**
+
       list of InDels avoided in following analysis due to too close distance (the `-min_idd` option).
 
   Then, HaploHiC loads bam file of each sequencing run, and distributes Hi-C PE-reads into different categories according to their mutations coverage.
-    - *RunID*.discarded.bam\\
+    - ***RunID*.discarded.bam**
+
       Hi-C PE-reads filtered out due to `UM`/`MM`/`SD`/`SP`/`LM` depending on options: `-flt_pe`, `-use_sp`, `-use_sd`, `-use_mm`, `-min_mq`.
-    - *RunID*.invalid.bam\\
+
+    - ***RunID*.invalid.bam**
+
       invalid Hi-C PE-reads: `Dangling`, `SelfCircle`, `DumpedPair-Forward/Reversed`, or `TooClose` alignment (see `-max_rd` and `-use_caln` options).
-    - *RunID*.phMut-dEnd-h1.bam and *RunID*.phMut-dEnd-h2.bam
+
+    - ***RunID*.phMut-dEnd-h1.bam** and ***RunID*.phMut-dEnd-h2.bam**
+
       Hi-C PE-reads whose two ends simutanously cover heterozygous mutations from same parental origin, which is the ONLY one this PE-reads support. The haplotype NO. ('h1' and 'h2') represent the index of the phased mutations in VCF file. For instance, from a phased site which has 'A|G' alleles, the 'A' allele is on the 'h1' origin, and 'G' allele is on the 'h2' origin.
-    - *RunID*.phMut-dEnd-hInter.bam
+
+    - ***RunID*.phMut-dEnd-hInter.bam**
+
       Hi-C PE-reads whose one or two ends cover heterozygous mutations from different parental origins.
-    - *RunID*.phMut-sEnd-h1.bam and *RunID*.phMut-sEnd-h2.bam
+
+    - ***RunID*.phMut-sEnd-h1.bam** and ***RunID*.phMut-sEnd-h2.bam**
+
       Hi-C PE-reads whose one end covers heterozygous mutations from ONLY one parental origin, while another end covers no heterozygous mutation (i.e., unknown parental origin, is given with the '*UK*' tag).
-    - *RunID*.phMut-sEnd-hInter.bam
+
+    - ***RunID*.phMut-sEnd-hInter.bam**
+
       Hi-C PE-reads whose one ends simutanously cover heterozygous mutations from different parental origins, while another end is '*UK*'.
-    - *RunID*.unknown.bam
+
+    - ***RunID*.unknown.bam**
+
       Hi-C PE-reads whose two ends are '*UK*'.
 
 - sEndUKtoHap
-  In this step, HaploHiC deals with *RunID*.phMut-sEnd-h1.bam and *RunID*.phMut-sEnd-h2.bam. It assigns parental origin to the '*UK*' end of PE-reads based on calculation of the `local contacts ratio`.
-    - PE-reads in *RunID*.phMut-sEnd-h1.bam are distributed into new files: *RunID*.phMut-sEnd-h1.h1Intra.bam and *RunID*.phMut-sEnd-h1.hInter.bam
-    - PE-reads in *RunID*.phMut-sEnd-h2.bam are distributed into new files: *RunID*.phMut-sEnd-h2.h2Intra.bam and *RunID*.phMut-sEnd-h2.hInter.bam
-    - The statistics files of `local contacts ratio` are generated: *RunID*.phMut-sEnd-h1.statOfPhasedLocReg.gz and *RunID*.phMut-sEnd-h2.statOfPhasedLocReg.gz
+
+  In this step, HaploHiC deals with ***RunID*.phMut-sEnd-h1.bam** and ***RunID*.phMut-sEnd-h2.bam**. It assigns parental origin to the '*UK*' end of PE-reads based on calculation of the `local contacts ratio`.
+    - PE-reads in ***RunID*.phMut-sEnd-h1.bam** are distributed into new files: ***RunID*.phMut-sEnd-h1.h1Intra.bam** and ***RunID*.phMut-sEnd-h1.hInter.bam**
+    - PE-reads in ***RunID*.phMut-sEnd-h2.bam** are distributed into new files: ***RunID*.phMut-sEnd-h2.h2Intra.bam** and ***RunID*.phMut-sEnd-h2.hInter.bam**
+    - The statistics files of `local contacts ratio` are generated: ***RunID*.phMut-sEnd-h1.statOfPhasedLocReg.gz** and ***RunID*.phMut-sEnd-h2.statOfPhasedLocReg.gz**
 
 - dEndUKtoHap
-  In this step, HaploHiC deals with *RunID*.unknown.bam. It assigns parental origin to the '*UK*' end of each PE-reads based on calculation of the `local contacts ratio`.
-    - PE-reads in *RunID*.phMut-sEnd-h1.bam are distributed into three files: *RunID*.unknown.h1Intra.bam, *RunID*.unknown.h2Intra.bam, and *RunID*.unknown.hInter.bam
-    - The statistics file of `local contacts ratio` is generated: *RunID*.unknown.statOfPhasedLocReg.gz.
+
+  In this step, HaploHiC deals with ***RunID*.unknown.bam**. It assigns parental origin to the '*UK*' end of each PE-reads based on calculation of the `local contacts ratio`.
+    - PE-reads in ***RunID*.phMut-sEnd-h1.bam** are distributed into three files: ***RunID*.unknown.h1Intra.bam**, ***RunID*.unknown.h2Intra.bam**, and ***RunID*.unknown.hInter.bam**
+    - The statistics file of `local contacts ratio` is generated: ***RunID*.unknown.statOfPhasedLocReg.gz**.
 
 - readsMerge
+
   In this step, HaploHiC merges 'h[x]Intra' and 'hInter' bams of previous steps, respectively.
-    - *RunID*.merge.h1Intra.bam includes PE-reads from *RunID*.phMut-dEnd-h1.bam, *RunID*.phMut-sEnd-h1.h1Intra.bam, and *RunID*.unknown.h1Intra.bam
-    - *RunID*.merge.h2Intra.bam includes PE-reads from *RunID*.phMut-dEnd-h2.bam, *RunID*.phMut-sEnd-h2.h2Intra.bam, and *RunID*.unknown.h2Intra.bam
-    - *RunID*.merge.hInter.bam includes PE-reads from *RunID*.phMut-dEnd-hInter.bam, *RunID*.phMut-sEnd-h1.hInter.bam, *RunID*.phMut-sEnd-h2.hInter.bam, and *RunID*.unknown.hInter.bam
-    - All statistics file of `local contacts ratio` are merged into *RunID*.statOfPhasedLocReg.gz
+    - ***RunID*.merge.h1Intra.bam** includes PE-reads from ***RunID*.phMut-dEnd-h1.bam**, ***RunID*.phMut-sEnd-h1.h1Intra.bam**, and ***RunID*.unknown.h1Intra.bam**
+    - ***RunID*.merge.h2Intra.bam** includes PE-reads from ***RunID*.phMut-dEnd-h2.bam**, ***RunID*.phMut-sEnd-h2.h2Intra.bam**, and ***RunID*.unknown.h2Intra.bam**
+    - ***RunID*.merge.hInter.bam** includes PE-reads from ***RunID*.phMut-dEnd-hInter.bam**, ***RunID*.phMut-sEnd-h1.hInter.bam**, ***RunID*.phMut-sEnd-h2.hInter.bam**, and ***RunID*.unknown.hInter.bam**
+    - All statistics file of `local contacts ratio` are merged into ***RunID*.statOfPhasedLocReg.gz**
 
 - dumpContacts
+
   In this step, HaploHiC provides BP and FRAG mode dump from merged results to summarize raw contacts of pairwise windows.
 
