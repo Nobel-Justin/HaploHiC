@@ -78,8 +78,6 @@ sub return_HELP_INFO{
 
        # General Options #
         -enzyme  [s]  enzyme type. <required>
-        -hapct   [i]  N-ploid of the sample. [2]
-                       Note: default 2 is for homo sapiens.
         -use_indel    use phased InDels. [disabled]
         -min_idd [i]  minimum distance to accept adjacent indels. [5]
         -st_step [i]  start wrokflow from certain step. [1]
@@ -130,6 +128,8 @@ sub return_HELP_INFO{
      Author:
         $AUTHOR ($EMAIL)
  \n";
+        # -hapct   [i]  N-ploid of the sample. [2]
+        #                Note: default 2 is for homo sapiens.
         # -fork    [i]  to run operations with N forks in parallel. [25]
         #                Note: 1) more forks, more memory consumed.
         #                      2) maximum is the number of paired bam files input.
