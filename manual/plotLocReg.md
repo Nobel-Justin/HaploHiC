@@ -29,3 +29,15 @@ Version:
 Author:
    Wenlong Jia (wenlongkxm@gmail.com)
 ```
+
+## Inputs
+
+`plotLocReg` gets the output folder path of `haplo_div` via option `-dir`, and automatically loads all merged **statOfPhasedLocReg.gz**.
+
+In the header of merged **statOfPhasedLocReg.gz**, the unit of local region is declared.
+
+## Outputs
+
+In the calculation of **local contacts ratio**, HaploHiC extends the local region with unit size till the phased contacts count reaches minimum.
+HaploHiC summaries how many Hi-C PE-reads with '*UK*' end(s) are processed by certain phased contacts in local region with certain size, and `plotLocReg` plots this distribution.
+Here is one ![instance](./image/plotLocReg.svg).
