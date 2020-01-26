@@ -205,25 +205,49 @@ Here is an instance, files under the output folder after all five steps (see [ne
 - sEndUKtoHap
 
   In this step, HaploHiC deals with ***RunID*.phMut-sEnd-h1.bam** and ***RunID*.phMut-sEnd-h2.bam**. It assigns parental origin to the '*UK*' end of PE-reads based on calculation of the `local contacts ratio`.
-    - PE-reads in ***RunID*.phMut-sEnd-h1.bam** are distributed into new files: ***RunID*.phMut-sEnd-h1.h1Intra.bam** and ***RunID*.phMut-sEnd-h1.hInter.bam**
-    - PE-reads in ***RunID*.phMut-sEnd-h2.bam** are distributed into new files: ***RunID*.phMut-sEnd-h2.h2Intra.bam** and ***RunID*.phMut-sEnd-h2.hInter.bam**
-    - The statistics files of `local contacts ratio` are generated: ***RunID*.phMut-sEnd-h1.statOfPhasedLocReg.gz** and ***RunID*.phMut-sEnd-h2.statOfPhasedLocReg.gz**
+    - PE-reads in ***RunID*.phMut-sEnd-h1.bam** are distributed into new files:
+      - ***RunID*.phMut-sEnd-h1.h1Intra.bam**
+      - ***RunID*.phMut-sEnd-h1.hInter.bam**
+    - PE-reads in ***RunID*.phMut-sEnd-h2.bam** are distributed into new files:
+      - ***RunID*.phMut-sEnd-h2.h2Intra.bam**
+      - ***RunID*.phMut-sEnd-h2.hInter.bam**
+    - The statistics files of `local contacts ratio` are generated:
+      - ***RunID*.phMut-sEnd-h1.statOfPhasedLocReg.gz**
+      - ***RunID*.phMut-sEnd-h2.statOfPhasedLocReg.gz**
 
 - dEndUKtoHap
 
   In this step, HaploHiC deals with ***RunID*.unknown.bam**. It assigns parental origin to the '*UK*' end of each PE-reads based on calculation of the `local contacts ratio`.
-    - PE-reads in ***RunID*.phMut-sEnd-h1.bam** are distributed into three files: ***RunID*.unknown.h1Intra.bam**, ***RunID*.unknown.h2Intra.bam**, and ***RunID*.unknown.hInter.bam**
-    - The statistics file of `local contacts ratio` is generated: ***RunID*.unknown.statOfPhasedLocReg.gz**.
+    - PE-reads in ***RunID*.phMut-sEnd-h1.bam** are distributed into three files:
+      - ***RunID*.unknown.h1Intra.bam**
+      - ***RunID*.unknown.h2Intra.bam**
+      - ***RunID*.unknown.hInter.bam**
+    - The statistics file of `local contacts ratio` is generated:
+      - ***RunID*.unknown.statOfPhasedLocReg.gz**.
 
 - readsMerge
 
   In this step, HaploHiC merges 'h[x]Intra' and 'hInter' bams of previous steps, respectively.
-    - ***RunID*.merge.h1Intra.bam** includes PE-reads from ***RunID*.phMut-dEnd-h1.bam**, ***RunID*.phMut-sEnd-h1.h1Intra.bam**, and ***RunID*.unknown.h1Intra.bam**
-    - ***RunID*.merge.h2Intra.bam** includes PE-reads from ***RunID*.phMut-dEnd-h2.bam**, ***RunID*.phMut-sEnd-h2.h2Intra.bam**, and ***RunID*.unknown.h2Intra.bam**
-    - ***RunID*.merge.hInter.bam** includes PE-reads from ***RunID*.phMut-dEnd-hInter.bam**, ***RunID*.phMut-sEnd-h1.hInter.bam**, ***RunID*.phMut-sEnd-h2.hInter.bam**, and ***RunID*.unknown.hInter.bam**
-    - All statistics file of `local contacts ratio` are merged into ***RunID*.statOfPhasedLocReg.gz**
+    - ***RunID*.merge.h1Intra.bam** includes PE-reads supporting contacts among the **h1** parental origin.
+      - ***RunID*.phMut-dEnd-h1.bam**
+      - ***RunID*.phMut-sEnd-h1.h1Intra.bam**
+      - ***RunID*.unknown.h1Intra.bam**
+    - ***RunID*.merge.h2Intra.bam** includes PE-reads supporting contacts among the **h2** parental origin.
+      - ***RunID*.phMut-dEnd-h2.bam**
+      - ***RunID*.phMut-sEnd-h2.h2Intra.bam**
+      - ***RunID*.unknown.h2Intra.bam**
+    - ***RunID*.merge.hInter.bam** includes PE-reads supporting contacts between the **h1** and **h2** parental origins.
+      - ***RunID*.phMut-dEnd-hInter.bam**
+      - ***RunID*.phMut-sEnd-h1.hInter.bam**
+      - ***RunID*.phMut-sEnd-h2.hInter.bam**
+      - ***RunID*.unknown.hInter.bam**
+    - ***RunID*.statOfPhasedLocReg.gz** contains all statistics of `local contacts ratio` from:
+      - ***RunID*.phMut-sEnd-h1.statOfPhasedLocReg.gz**
+      - ***RunID*.phMut-sEnd-h2.statOfPhasedLocReg.gz**
+      - ***RunID*.unknown.statOfPhasedLocReg.gz**.
 
 - dumpContacts
 
   In this step, HaploHiC provides **BP** and **FRAG** mode dump from merged results to summarize raw contacts of pairwise windows.
 
+<!-- 1.1, 2020-01-26 -->
