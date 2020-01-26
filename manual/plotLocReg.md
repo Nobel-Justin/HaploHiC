@@ -41,4 +41,4 @@ In the header of merged **statOfPhasedLocReg.gz**, the unit of local region is d
 In the calculation of **local contacts ratio**, HaploHiC extends the local region with unit size till the phased contacts count reaches minimum.
 HaploHiC summaries how many Hi-C PE-reads with '*UK*' end(s) are processed by certain phased contacts in local region with certain size, and `plotLocReg` plots this distribution.
 Here is one instance.
-![instance](./image/plotLocReg.png)
+<img src="./image/plotLocReg.png" width="60%" align="center">
