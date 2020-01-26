@@ -1,3 +1,4 @@
+<!-- 1.1, 2020-01-26 -->
 # haplo_div
 `haplo_div` loads alignment file(s) of Hi-C data and haplotype information, and assigns haplotypes to Hi-C PE-reads of unknown parental origin according to contacts information (**local contacts ratio**) in local genomic regions with dynamic size. Currently, this functions ONLY works on **diploid**.
 
@@ -249,5 +250,3 @@ Here is an instance, files under the output folder after all five steps (see [ne
 - dumpContacts
 
   In this step, HaploHiC provides **BP** and **FRAG** mode dump from merged results to summarize raw contacts of pairwise windows.
-
-<!-- 1.1, 2020-01-26 -->
