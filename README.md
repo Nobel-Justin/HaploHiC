@@ -40,7 +40,6 @@ Commands:
 
 -- Extensions
    juicer_db      make database files for juicer and HaploHiC operations.
-   run_juicer     set up workspace and shell file to run juicer.
    juicerDump     run juicer dump, and merge the inter-chr and intra-chr.
    FRAG_gene      convert FRAG contacts to gene level contacts.
 ```
