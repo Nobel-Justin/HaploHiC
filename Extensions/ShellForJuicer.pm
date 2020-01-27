@@ -121,7 +121,7 @@ sub Load_moduleVar_to_pubVarPool{
             # settings shared
             [ skip_flux => 0 ],
             [ submit => 0 ],
-            [ Flux_allocation => 'none' ], # indikar_fluxod
+            [ Flux_allocation => 'none' ],
             [ Flux_queue => 'fluxod' ],
             [ job_name => undef ],
             [ email => undef ],

@@ -128,11 +128,9 @@ sub return_HELP_INFO{
      -- Haplotype work
         haplo_div      $V_Href->{func}->{haplo_div }->{descp}
         plotLocReg     $V_Href->{func}->{plotLocReg}->{descp}
-        adjustDump     $V_Href->{func}->{adjustDump}->{descp}
 
      -- Extensions
         juicer_db      $V_Href->{func}->{juicer_db }->{descp}
-        run_juicer     $V_Href->{func}->{run_juicer}->{descp}
         juicerDump     $V_Href->{func}->{juicerDump}->{descp}
         FRAG_gene      $V_Href->{func}->{FRAG_gene }->{descp}
 
@@ -142,6 +140,8 @@ sub return_HELP_INFO{
      Author:
         $V_Href->{AUTHOR} ($V_Href->{EMAIL})
  \n";
+        # adjustDump     $V_Href->{func}->{adjustDump}->{descp}
+        # run_juicer     $V_Href->{func}->{run_juicer}->{descp}
 }
 
 #--- extract options for command ---

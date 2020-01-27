@@ -19,6 +19,7 @@ Options:
    -ref_v  [s]  version of reference genome, see contents under 'db_dir'. <required>
    -output [s]  gene-level contacts output. [optional]
    -glist  [s]  gene list file which you want to deal with ONLY. [optional]
+                 Note: default to find contacts between genes in this list.
    -regbed [s]  one-based BED list file of region to take into contact map. [optional]
                  Note: use this option to add concerned region(s), e.g., enhancer.
 
@@ -30,10 +31,10 @@ Options:
    -gextr  [s]  extending gene region to such ceiling length. [0]
                  Note: 1) default is 0, means disabled.
                        2) only works on extended region, not gene body (whatever length).
-   -glsgsd      use genes in gene_list (-glist) in single-side of gene-pair. [disabled]
+   -glsgsd      to find contacts of gene_list (-glist) genes with all genes. [disabled]
    -mindis [i]  minimum distance between two genes/regions to calculate contacts. [1000]
                  Note: gene/region pairs having overlap are filtered out.
-   -hInter      note the FRAG contacts are inter-haplotype, default is intra-haplotype.
+   -hInter      denote the FRAG contacts are inter-haplotype, default is intra-haplotype.
 
    -h|help      Display this help info.
 
