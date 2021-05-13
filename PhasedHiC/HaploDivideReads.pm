@@ -33,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.32";
-$DATE = '2019-04-05';
+$VERSION = "0.33";
+$DATE = '2021-05-13';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -84,6 +84,11 @@ sub return_HELP_INFO{
         -ed_step [i]  stop workflow at certain step. [$V_Href->{totalStepNO}]
                        Note: step-NO. list:  1: splitBam;   2: sEndUKtoHap;  3: dEndUKtoHap; 
                                              4: readsMerge; 5: dumpContacts
+        -fork    [i]  to run operations with N forks in parallel. [5]
+                       Note: 1) more forks, more memory consumed.
+                             2) step NO.1/4: maximum is the number of Hi-C PE bam files input.
+                                step NO.2/3: maximum is the chromosome count to deal.
+                             3) if set a large number, it's better to run NO.1 step alone first.
 
        # Options of step NO.1 #
         -flt_pe       discard PE-reads once either read has unqualitified alignment. [disabled]
@@ -130,9 +135,6 @@ sub return_HELP_INFO{
  \n";
         # -hapct   [i]  N-ploid of the sample. [2]
         #                Note: default 2 is for homo sapiens.
-        # -fork    [i]  to run operations with N forks in parallel. [25]
-        #                Note: 1) more forks, more memory consumed.
-        #                      2) maximum is the number of paired bam files input.
         # -skipddp      skip de-duplication of phased reads. [disabled]
         #                ** Note: this option ('-skipddp') is also effective in step NO.5.
         # -ucrpha  [i]  at most use such amount of flanking PhaHetMut to calculate LHDR for HaploUKPE. [5]
@@ -182,7 +184,7 @@ sub Load_moduleVar_to_pubVarPool{
             # options
             ## general
             [ haploCount => 2 ],
-            [ forkNum => 25 ],
+            [ forkNum => 5 ], # 1st,4th: NumOfPairedBam; 2nd,3rd: chrCount*2 (Intra+Inter).
             # 1: splitBam;   2: sEndUKtoHap; 3: dEndUKtoHap;
             # 4: readsMerge; 5: dumpContacts
             [ stepToStart => 1 ],
@@ -318,8 +320,8 @@ sub Get_Cmd_Options{
         # options
         ## general
         "-enzyme:s" => \$V_Href->{enzyme_type},
-        "-hapct:i"  => \$V_Href->{haploCount},
-        "-fork:i"   => \$V_Href->{forkNum}, # hidden option
+        "-hapct:i"  => \$V_Href->{haploCount}, # hidden option
+        "-fork:i"   => \$V_Href->{forkNum},
         "-st_step:i"=> \$V_Href->{stepToStart},
         "-ed_step:i"=> \$V_Href->{stepToStop},
         "-slbmpf:s" => \@{$V_Href->{SelectBamPref}}, # hidden option
