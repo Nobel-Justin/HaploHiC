@@ -1,4 +1,4 @@
-<!-- 1.0, 2020-01-24 -->
+<!-- 1.1, 2021-05-14 -->
 # HaploHiC
 
 Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
@@ -7,7 +7,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 - Email:  wenlongkxm@gmail.com
 
 ## Version
-0.32
+0.33
 
 ## Installation
 
