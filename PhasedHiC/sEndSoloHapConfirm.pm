@@ -32,8 +32,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::sEndSoloHapConfirm';
 #----- version --------
-$VERSION = "0.19";
-$DATE = '2019-04-06';
+$VERSION = "0.20";
+$DATE = '2021-05-10';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -153,6 +153,7 @@ sub getChrPairBam{
     for my $pairBamHref ( @TODOpairBamHref ){
         $pairBamHref->{chrPairBam} = {}; # reset
         for my $tag (@tag){
+            $pairBamHref->{chrPairBam}->{$tag} = {}; # initialize
             my $splitBam = $pairBamHref->{splitBam}->{$tag};
             my $chrPairList = $splitBam->filepath . '.chrPairList';
             open (CPL, Try_GZ_Read($chrPairList)) || die "fail read chrPairList: $!\n";
