@@ -1,4 +1,4 @@
-<!-- 1.1, 2020-01-26 -->
+<!-- 1.2, 2021-05-14 -->
 # haplo_div
 `haplo_div` loads alignment file(s) of Hi-C data and haplotype information, and assigns haplotypes to Hi-C PE-reads of unknown parental origin according to contacts information (**local contacts ratio**) in local genomic regions with dynamic size. Currently, this functions ONLY works on **diploid**.
 
@@ -34,6 +34,11 @@ Options:
    -ed_step [i]  stop workflow at certain step. [5]
                   Note: step-NO. list:  1: splitBam;   2: sEndUKtoHap;  3: dEndUKtoHap;
                                         4: readsMerge; 5: dumpContacts
+   -fork    [i]  to run operations with N forks in parallel. [5]
+                  Note: 1) more forks, more memory consumed.
+                        2) step NO.1/4: maximum is the number of Hi-C PE bam files input.
+                           step NO.2/3: maximum is the chromosome count to deal.
+                        3) if set a large number, it's better to run NO.1 step alone first.
 
   # Options of step NO.1 #
    -flt_pe       discard PE-reads once either read has unqualitified alignment. [disabled]
@@ -73,7 +78,7 @@ Options:
    -h|help       Display this help info.
 
 Version:
-   0.32 on 2019-04-05
+   0.33 on 2021-05-13
 
 Author:
    Wenlong Jia (wenlongkxm@gmail.com)
@@ -161,7 +166,7 @@ Here is an instance, files under the output folder after all five steps (see [ne
 ```
 
 ## Steps
-`haplo_div` has five steps: `splitBam`, `sEndUKtoHap`, `dEndUKtoHap`, `readsMerge`, and `dumpContacts`. User could set step interval to proceed via `-st_step` and `-ed_step` options.
+`haplo_div` has five steps: `splitBam`, `sEndUKtoHap`, `dEndUKtoHap`, `readsMerge`, and `dumpContacts`.
 
 - splitBam
 
@@ -261,3 +266,13 @@ Here is an instance, files under the output folder after all five steps (see [ne
 - dumpContacts
 
   In this step, HaploHiC provides **BP** and **FRAG** mode dump from merged results to summarize raw contacts of pairwise windows.
+
+## Tips
+
+- Step Interval
+
+  User could set step interval to proceed via `-st_step` and `-ed_step` options.
+
+- Parallel Operations
+
+  The `-fork` option enables the operations running in parallel forks via the `Parallel::ForkManager` module. The maximum fork number allowed is different in steps. In the 1st (`splitBam`) and 4th (`readsMerge`) steps, it is the number of Hi-C PE bam files, due to the operations can be done in separated bam files. While in the 2nd (`sEndUKtoHap`) and 3rd (`dEndUKtoHap`) steps, it becomes to the chromosome count to deal, because the haplotype assignment work is done in chromosome pairs, respectively. Note that a large fork number speeds up the 2nd and 3rd steps obviously. However, when PERL forks, each child process asks the OS (Linux) for initial memory space as much as the peak space the father process ever used. It's better to run the 1st step alone first with less fork number (e.g. five) and then run from 2nd to the last step with a large fork number (e.g. 20). Because the 1st step loads the whole VCF list (`-phsvcf` option) of the mutations and takes comparable memory to store, the total memory consumed in the 2nd and 3rd step will be huge if a large fork number is used.
