@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use List::Util qw/ max min sum first /;
 use Data::Dumper;
+use BioFuse::Util::Sort qw/ sortByStrAndSubNum /;
 use HaploHiC::LoadOn;
 use HaploHiC::PhasedHiC::sEndSoloHapConfirm qw/ prepareGetHapBamObj getChrPairBam chrPair_forkSetting chrPair_loadContacts chrPair_HapConfirmWork chrPair_mergeResult /;
 use HaploHiC::PhasedHiC::phasedPEtoContact qw/ get_rOBpair_HapLinkCount /;
@@ -23,8 +24,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::dEndUkHapConfirm';
 #----- version --------
-$VERSION = "0.26";
-$DATE = '2019-04-05';
+$VERSION = "0.27";
+$DATE = '2021-08-09';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -63,7 +64,7 @@ sub dEndUK_get_HapLink{
 ## use multiple forks at preChr level
 sub confirm_dEndU_Hap{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $preChrHf = $parm{preChrHf};
 
@@ -103,20 +104,29 @@ sub confirm_dEndU_Hap{
 #--- assign haplotype to dEndUK PE UK-end ---
 sub chrPair_dEndU_assignHap{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $pe_OB_poolAf = $parm{pe_OB_poolAf};
     my $getHapBamHf = $parm{getHapBamHf};
     my $HapLinkHf = $parm{HapLinkHf};
 
     for my $pe_OB (@$pe_OB_poolAf){
-        # get chr-pos ascending sorted all mapped reads_OB
-        my $rOB_sortAref = $pe_OB->sorted_rOB_Af(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+        # get arranged mapped reads_OB
+        my $rOB_arngAf = $pe_OB->arranged_rOB_Af;
         # recover SuppHaplo attribute
-        $_->recover_SuppHaploAttr for @$rOB_sortAref;
-        # get haplo link count of paired rOB, <do not need sort again>
-        my $rOB_a = $rOB_sortAref->[0];
-        my $rOB_b = $rOB_sortAref->[-1];
+        $_->recover_SuppHaploAttr for @$rOB_arngAf;
+        # get haplo link count of paired rOB
+        ## needs to sort by chr-pos for window contacts seeking (get_rOBpair_HapLinkCount)
+        my @rOB_sorted = sort {
+                             sortByStrAndSubNum(
+                                 Str_a => $a->mseg, Num_a => $a->mpos,
+                                 Str_b => $b->mseg, Num_b => $b->mpos,
+                                 SortHref => $V_Href->{ChrThings},
+                                 SortKey  => 'turn'
+                             )
+                         } ($rOB_arngAf->[0], $rOB_arngAf->[-1]);
+        my $rOB_a = $rOB_sorted[ 0];
+        my $rOB_b = $rOB_sorted[-1];
         my $LocRegInfoAf = get_rOBpair_HapLinkCount(rOB_a => $rOB_a, rOB_b => $rOB_b, skipSort => 1, HapLinkHf => $HapLinkHf);
         my ($HapLinkC_Hf, $mark, $assignMethod, $modBool) = @$LocRegInfoAf;
         # assign HapID to both nonHap_rOB
@@ -180,9 +190,9 @@ sub chrPair_dEndU_assignHap{
         ## assign
         my @assHapComb = split /,/, $assHapComb;
         for my $i (0, -1){
-            $rOB_sortAref->[$i]->load_SuppHaplo(hapID => $assHapComb[$i], allele_OB => 'NULL');
-            $rOB_sortAref->[$i]->addHapIDtoOptfd; # update
-            $rOB_sortAref->[$i]->add_str_to_optfd(str => "\tXU:Z:$mark");
+            $rOB_sorted[$i]->load_SuppHaplo(hapID => $assHapComb[$i], allele_OB => 'NULL');
+            $rOB_sorted[$i]->addHapIDtoOptfd; # update
+            $rOB_sorted[$i]->add_str_to_optfd(str => "\tXU:Z:$mark");
         }
         # output
         my $getHapTag = $assHapComb[0] eq $assHapComb[-1] ? "$assHapComb[0]Intra" : "hInter";

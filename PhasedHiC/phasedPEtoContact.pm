@@ -29,8 +29,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedPEtoContact';
 #----- version --------
-$VERSION = "0.18";
-$DATE = '2019-04-05';
+$VERSION = "0.19";
+$DATE = '2021-08-09';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -49,12 +49,12 @@ my @functoion_list = qw/
 ## load PE's contact => [de-dup PE] => get contact count
 sub phasePE_to_contactCount{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $tagToBamHref = $parm{tagToBamHref};
-    my $chrPair = $parm{chrPair} || undef;
-    my $preChr  = $parm{preChr}  || undef;
-    my $chrRel  = $parm{chrRel}  || undef;
+    my $chrPair = $parm{chrPair} || undef; # chr_a,chr_b
+    my $preChr  = $parm{preChr}  || undef; # chr_a
+    my $chrRel  = $parm{chrRel}  || undef; # intraChr/interChr
 
     # load reads from each bam
     for my $tag (sort keys %$tagToBamHref){
@@ -76,7 +76,7 @@ sub phasePE_to_contactCount{
 #--- load contacts of phased PE-reads ---
 sub load_phasedPE_contacts{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $pe_OB_poolAf = $parm{pe_OB_poolAf};
     my $idxFunc = $parm{idxFunc};
@@ -89,11 +89,11 @@ sub load_phasedPE_contacts{
     my $lastChrPair = join(',', @$lastChrPairAf[0,1]);
     for my $pe_OB (@$pe_OB_poolAf){
         # get chr-pos ascending sorted all mapped reads_OB
-        my $rOB_sortAref = $pe_OB->sorted_rOB_Af(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn');
+        my $rOB_arngAf = $pe_OB->arranged_rOB_Af;
         # recover SuppHaplo attribute
-        $_->recover_SuppHaploAttr for @$rOB_sortAref;
+        $_->recover_SuppHaploAttr for @$rOB_arngAf;
         # extract haplotype confirmed alignments
-        my @hasHaprOB = grep $_->has_SuppHaplo, @$rOB_sortAref;
+        my @hasHaprOB = grep $_->has_SuppHaplo, @$rOB_arngAf;
         # double check
         if( scalar(@hasHaprOB) < 2 ){
             warn_and_exit "<ERROR>\tPhased PE-reads doesn't have at least two haplotype confirmed alignments.\n".Dumper($pe_OB);
@@ -106,7 +106,16 @@ sub load_phasedPE_contacts{
         ){
             next; # do not take this PE into contact counting
         }
-        # as sorted, so take first[0] and last[-1] one as index of contacted region
+        # ONLY take first[0] and last[-1], and sort by chr+pos for window contacts records
+        @hasHaprOB = sort {
+                         sortByStrAndSubNum(
+                             Str_a => $a->mseg, Num_a => $a->mpos,
+                             Str_b => $b->mseg, Num_b => $b->mpos,
+                             SortHref => $V_Href->{ChrThings},
+                             SortKey  => 'turn'
+                         )
+                     } ($hasHaprOB[0], $hasHaprOB[-1]);
+        # as chr+pos sorted, so take first[0] and last[-1] one as index of contacted region
         my (%chr, %pIdx, %hapID);
         $chr{a}   = $hasHaprOB[ 0]->mseg;
         $chr{b}   = $hasHaprOB[-1]->mseg;
@@ -148,8 +157,10 @@ sub load_phasedPE_contacts{
             $hapID{$i} =~ s/,.+//; # arbitrary, greedy
             $hapID{$p} =  first {$_ ne $hapID{$i}} split /,/, $hapID{$p};
         }
-        # get PE-Info string
-        my $peInfoStr = join(';', map {( join(',', $_->mseg, $_->mpos) )} @$rOB_sortAref);
+        # get PE-Info string, use chr-pos ascending sorted ALL-rOB
+        my $peInfoStr = join(';', map {( join(',', $_->mseg, $_->mpos) )}
+                                  @{ $pe_OB->sorted_rOB_Af(chrSortHref => $V_Href->{ChrThings}, chrSortKey  => 'turn') }
+                            );
         # record, 'peInfoStr' as key, 'accumulated count' as value
         $V_Href->{phasePEdetails}->{$chr{a}}->{$chr{b}}->{$pIdx{a}}->{$pIdx{b}}->{"$hapID{a},$hapID{b}"}->{$peInfoStr} ++;
     }
@@ -160,7 +171,7 @@ sub load_phasedPE_contacts{
 #--- get window index of mapping position ---
 sub mPosToWinIdx{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     return Pos2Idx(pos => $parm{pos}, winSize => $V_Href->{mapPosWinSize});
 }
@@ -169,7 +180,7 @@ sub mPosToWinIdx{
 ## note here is to accumulate counts to 'phasePEcontact' container
 sub phasePE_contacts_to_count{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $tag = $parm{tag};
 
@@ -212,7 +223,7 @@ sub phasePE_contacts_to_count{
 #--- return haplo link count of given reads_OB pair ---
 sub get_rOBpair_HapLinkCount{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $skipSort = $parm{skipSort} || 0;
     my $hapRegex = $parm{hapRegex} || undef;

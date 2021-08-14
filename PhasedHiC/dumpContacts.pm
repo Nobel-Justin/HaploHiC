@@ -101,7 +101,7 @@ sub dump_contacts{
 #--- prepare work ---
 sub prepare{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $dumpOptAf = $parm{dumpOptAf};
 
@@ -128,7 +128,7 @@ sub prepare{
 #--- load enzyme site position list ---
 sub load_enzyme_site_list{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $keep_all = $parm{keep_all} || 0;
 
@@ -158,7 +158,7 @@ sub load_enzyme_site_list{
 #--- get contact idx in given mode ---
 sub get_contacts_idx{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $get_remainder = $parm{get_remainder} || 0;
 
@@ -220,7 +220,7 @@ sub write_dumpBinLog{
 #--- contacts output and bin log ---
 sub contacts_output{
     # options
-    shift if (@_ && $_[0] =~ /$MODULE_NAME/);
+    # shift if (@_ && $_[0] =~ /$MODULE_NAME/);
     my %parm = @_;
     my $tag = $parm{tag};
 
