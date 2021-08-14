@@ -1,4 +1,4 @@
-<!-- 1.2, 2021-05-14 -->
+<!-- 1.21, 2021-08-14 -->
 # haplo_div
 `haplo_div` loads alignment file(s) of Hi-C data and haplotype information, and assigns haplotypes to Hi-C PE-reads of unknown parental origin according to contacts information (**local contacts ratio**) in local genomic regions with dynamic size. Currently, this functions ONLY works on **diploid**.
 
@@ -78,7 +78,7 @@ Options:
    -h|help       Display this help info.
 
 Version:
-   0.33 on 2021-05-13
+   0.34 on 2021-08-14
 
 Author:
    Wenlong Jia (wenlongkxm@gmail.com)

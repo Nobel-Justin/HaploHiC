@@ -7,7 +7,7 @@ Comprehensive haplotype division of Hi-C PE-reads based on local contacts ratio.
 - Email:  wenlongkxm@gmail.com
 
 ## Version
-0.33
+0.34
 
 ## Installation
 
