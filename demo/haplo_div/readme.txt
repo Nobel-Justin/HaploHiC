@@ -25,11 +25,12 @@ Save these two folders in the current folder.
 
 < Operation >
 
-1. set variables in the 'setting.sh' file
-2. run the 'run.sh' file in this folder
+1. please download the alignment and database files.
+2. set variables in the 'setting.sh' file
+3. run the 'run.sh' file in this folder
     bash run.sh 1>olog 2>elog
 
 
 Wenlong Jia
 wenlongkxm@gmail.com
-2021-09-15
+2021-09-16
