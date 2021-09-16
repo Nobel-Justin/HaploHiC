@@ -47,7 +47,7 @@ Commands:
 ### Haplotype work
 - [haplo_div](./manual/haplo_div.md)
 
-  `haplo_div` loads alignment file(s) of Hi-C data and haplotype information, and assigns haplotypes to Hi-C PE-reads of unknown parental origin according to contacts information (**local contacts ratio**) in local genomic regions with dynamic size.
+  `haplo_div` loads alignment file(s) of Hi-C data and haplotype information, and assigns haplotypes to Hi-C PE-reads of unknown parental origin according to contacts information (**local contacts ratio**) in local genomic regions with dynamic size. Please check the [demo](./demo/haplo_div).
 
 - [plotLocReg](./manual/plotLocReg.md)
 
@@ -56,7 +56,7 @@ Commands:
 ### Extensions
 - [juicer_db](./manual/juicer_db.md)
 
-  `juicer_db` automatically prepares database files. This database supports operation of both [juicer](https://github.com/aidenlab/juicer) and HaploHiC.
+  `juicer_db` automatically prepares database files. This database supports operation of both [juicer](https://github.com/aidenlab/juicer) and HaploHiC. Please check the [demo](./demo/juicer_db).
 
 - [juicerDump](./manual/juicerDump.md)
 
