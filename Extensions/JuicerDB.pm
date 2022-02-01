@@ -34,7 +34,7 @@ $AUTHOR = 'Wenlong Jia';
 $EMAIL = 'wenlongkxm@gmail.com';
 
 #--------- functions in this pm --------#
-my @functoion_list = qw/
+my @function_list = qw/
                         return_HELP_INFO
                         Load_moduleVar_to_pubVarPool
                         Get_Cmd_Options

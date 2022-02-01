@@ -111,7 +111,7 @@ our $V_Href = {
 };
 
 #--------- functions in this pm --------#
-my @functoion_list = qw/
+my @function_list = qw/
                         load_variants_dict
                      /;
 

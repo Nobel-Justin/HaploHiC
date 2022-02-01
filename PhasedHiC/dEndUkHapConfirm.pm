@@ -32,7 +32,7 @@ $AUTHOR = 'Wenlong Jia';
 $EMAIL = 'wenlongkxm@gmail.com';
 
 #--------- functions in this pm --------#
-my @functoion_list = qw/
+my @function_list = qw/
                         dEndUK_get_HapLink
                         confirm_dEndU_Hap
                         chrPair_dEndU_assignHap
