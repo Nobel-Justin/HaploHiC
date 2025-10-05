@@ -33,8 +33,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::HaploDivideReads';
 #----- version --------
-$VERSION = "0.34";
-$DATE = '2021-08-14';
+$VERSION = "0.35";
+$DATE = '2025-10-04';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -492,7 +492,7 @@ sub check_files{
             warn_and_exit "<ERROR>\tcannot recognize R1/R2.bam files from input:\n"
                                 ."\t$SourceBam\n";
         }
-        else{
+        else{ # sortN bam (R1,R2 merged)
             # check existence
             if(!file_exist(filePath=>$SourceBam)){
                 warn_and_exit "<ERROR>\tbam file does not exist:\n"
@@ -513,6 +513,11 @@ sub check_files{
             }
             # bam object
             my $PE_bam = BioFuse::BioInfo::Objects::SeqData::Bam_OB->new(filepath => $SourceBam, tag => $bam_prefix);
+            # check sortN
+            unless($PE_bam->isNsort){
+                warn_and_exit "<ERROR>\tthe paired-end bam is not sorted by reads name:\n"
+                                    ."\t$SourceBam\n";
+            }
             # records
             my $i = scalar @{$V_Href->{PairBamFiles}};
             push @{$V_Href->{PairBamFiles}}, {PE_bam => $PE_bam, prefix => $bam_prefix, no => $i};

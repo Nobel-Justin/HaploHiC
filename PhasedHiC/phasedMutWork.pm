@@ -30,8 +30,8 @@ my ($VERSION, $DATE, $AUTHOR, $EMAIL, $MODULE_NAME);
 
 $MODULE_NAME = 'HaploHiC::PhasedHiC::phasedMutWork';
 #----- version --------
-$VERSION = "0.17";
-$DATE = '2019-04-03';
+$VERSION = "0.18";
+$DATE = '2025-10-04';
 
 #----- author -----
 $AUTHOR = 'Wenlong Jia';
@@ -172,7 +172,7 @@ sub load_phased_VCF{
     close VCF;
     # check
     if( $V_Href->{VCFmutStat}->{i05_hetPhaMut} == 0 ){
-        warn_and_exit "<ERROR>\tno valid phased mutations found in VCF.\n";
+        warn_and_exit "<ERROR>\tno valid phased mutations found in VCF.\n".Dumper($V_Href->{VCFmutStat});
     }
 
     # inform
